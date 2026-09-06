@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(export PATH=\"/tmp/node-v20.19.0-darwin-arm64/bin:$PATH\")",
+      "Bash(npm --version)",
+      "Bash(python -m uvicorn backend.main:app --port 8000)",
+      "Bash(echo \"BACKEND_PID=$!\")",
+      "Bash(npm run:*)",
+      "Bash(echo \"FRONTEND_PID=$!\")",
+      "Read(//private/tmp/**)",
+      "Bash(pkill -f \"uvicorn backend.main:app\")",
+      "Bash(python3 -m uvicorn backend.main:app --port 8000)",
+      "Bash(python3 -c \"from backend.main import app; print\\('OK'\\)\")",
+      "Bash(git init *)",
+      "Bash(git remote *)",
+      "Bash(git add *)"
+    ]
+  }
+}
