@@ -51,35 +51,9 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup():
-    import shutil, sqlite3 as _sqlite3
     db_path = db.DB_PATH
     log.info(f"DB_PATH={db_path}")
     db_path.parent.mkdir(parents=True, exist_ok=True)
-
-    seed_path = Path(__file__).parent.parent / "seed" / "linemaker.db"
-    if seed_path.exists():
-        def _max_result_id(path):
-            try:
-                c = _sqlite3.connect(str(path))
-                row = c.execute("SELECT MAX(id) FROM play_results").fetchone()
-                c.close()
-                return row[0] or 0
-            except Exception:
-                return 0
-
-        seed_max = _max_result_id(seed_path)
-        live_max = _max_result_id(db_path) if db_path.exists() else 0
-
-        if seed_max > live_max:
-            tmp = db_path.parent / "linemaker.db.tmp"
-            shutil.copy(seed_path, tmp)
-            os.replace(tmp, db_path)
-            log.info(f"Seed applied: seed MAX(id)={seed_max} > live MAX(id)={live_max}, replaced {db_path}")
-        else:
-            log.info(f"Seed skipped: seed MAX(id)={seed_max} <= live MAX(id)={live_max}")
-    else:
-        log.info("No seed file — using existing DB")
-
     db.init_db()
     setup_scheduler(_analyze_games)
 
