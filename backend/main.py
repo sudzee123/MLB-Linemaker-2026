@@ -434,12 +434,38 @@ def admin_diag():
         except Exception as e:
             db_counts["error"] = str(e)
 
+    railway_env = {k: os.environ.get(k) for k in [
+        "RAILWAY_VOLUME_MOUNT_PATH", "RAILWAY_VOLUME_NAME",
+        "RAILWAY_ENVIRONMENT", "RAILWAY_ENVIRONMENT_NAME",
+        "RAILWAY_SERVICE_NAME", "RAILWAY_SERVICE_ID",
+        "RAILWAY_PROJECT_NAME",
+    ]}
+
+    try:
+        root_dev = os.stat("/").st_dev
+        data_dev = os.stat("/data").st_dev
+        data_is_mount = (root_dev != data_dev)
+    except Exception as e:
+        root_dev = data_dev = None
+        data_is_mount = str(e)
+
+    try:
+        with open("/proc/mounts") as f:
+            proc_mounts = f.read()
+    except Exception as e:
+        proc_mounts = str(e)
+
     return {
         "DB_PATH": db_path_str,
         "file_exists": file_exists,
         "file_size_bytes": file_size,
         "data_listdir": data_listdir,
         "data_stat": data_stat_info,
+        "root_st_dev": root_dev,
+        "data_st_dev": data_dev,
+        "data_is_separate_mount": data_is_mount,
+        "proc_mounts": proc_mounts,
+        "railway_env": railway_env,
         "db_counts": db_counts,
         "sqlite_sequence": sqlite_sequence,
     }
