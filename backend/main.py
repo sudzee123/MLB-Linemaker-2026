@@ -51,6 +51,9 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup():
+    db_path = db.DB_PATH
+    log.info(f"DB_PATH={db_path}")
+    db_path.parent.mkdir(parents=True, exist_ok=True)
     db.init_db()
     setup_scheduler(_analyze_games)
 
