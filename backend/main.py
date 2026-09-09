@@ -181,7 +181,7 @@ def _analyze_games(game_date: str, through_date: str, odds_list: list[dict] | No
         db.save_games(game_date, through_date, cached)
 
     # Auto-track on every call — dedup prevents double-logging
-    today = date_type.today().strftime("%Y-%m-%d")
+    today = _today()
     if game_date >= today:
         _auto_track(cached, game_date)
 
@@ -352,11 +352,13 @@ def _find_odds_fuzzy(away_ab: str, home_ab: str, odds_list: list[dict]) -> dict 
 # ─── Date helpers ─────────────────────────────────────────────────────────────
 
 def _today() -> str:
-    return date_type.today().strftime("%Y-%m-%d")
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("America/Chicago")).strftime("%Y-%m-%d")
 
 
 def _yesterday() -> str:
-    return (date_type.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+    from zoneinfo import ZoneInfo
+    return (datetime.now(ZoneInfo("America/Chicago")) - timedelta(days=1)).strftime("%Y-%m-%d")
 
 
 # ─── Game endpoints ───────────────────────────────────────────────────────────
