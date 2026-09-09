@@ -51,9 +51,22 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup():
+    import shutil
     db_path = db.DB_PATH
     log.info(f"DB_PATH={db_path}")
     db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    seed_path = Path(__file__).parent.parent / "seed" / "linemaker.db"
+    if seed_path.exists():
+        existing_size = db_path.stat().st_size if db_path.exists() else 0
+        if existing_size < 100_000:
+            shutil.copy(seed_path, db_path)
+            log.info(f"Seed applied: copied {seed_path} to {db_path} ({seed_path.stat().st_size} bytes)")
+        else:
+            log.info(f"Seed skipped: existing DB is {existing_size} bytes, seed not needed")
+    else:
+        log.info("No seed file found, using existing DB")
+
     db.init_db()
     setup_scheduler(_analyze_games)
 
