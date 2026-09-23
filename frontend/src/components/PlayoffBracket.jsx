@@ -45,10 +45,12 @@ function SeriesCard({ seriesKey, title, sub, bestOf, seeds, series, setSeriesFie
     setSeriesField(seriesKey, 'pick', pick === team ? '' : team)
   }
 
-  const TeamBlock = ({ team }) => {
+  // Rendered inline (not as a nested component) so the inputs keep focus
+  // across the re-renders that autosave triggers on every keystroke.
+  const teamBlock = (team, idx) => {
     const l = lines[team] || {}
     return (
-      <div className="pb-teamblock">
+      <div className="pb-teamblock" key={team || `empty-${idx}`}>
         <button
           className={`pb-team${pick === team && team ? ' pb-team-win' : ''}${!team ? ' pb-team-empty' : ''}`}
           onClick={() => choose(team)}
@@ -87,8 +89,8 @@ function SeriesCard({ seriesKey, title, sub, bestOf, seeds, series, setSeriesFie
         <span className="pb-series-title">{title}</span>
         <span className="pb-series-sub">{sub} · Bo{bestOf}</span>
       </div>
-      <TeamBlock team={a} />
-      <TeamBlock team={b} />
+      {teamBlock(a, 0)}
+      {teamBlock(b, 1)}
     </div>
   )
 }
