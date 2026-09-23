@@ -85,9 +85,11 @@ def init_db():
         for col, table, defn in [
             ("window",    "play_results",  "TEXT NOT NULL DEFAULT 'season'"),
             ("window",    "tracked_plays", "TEXT NOT NULL DEFAULT 'season'"),
-            ("fair_ml",   "tracked_plays", "INTEGER"),
-            ("fair_ml",   "play_results",  "INTEGER"),
-            ("conflict",  "tracked_plays", "INTEGER NOT NULL DEFAULT 0"),
+            ("fair_ml",     "tracked_plays", "INTEGER"),
+            ("fair_ml",     "play_results",  "INTEGER"),
+            ("opp_book_ml", "tracked_plays", "INTEGER"),
+            ("opp_book_ml", "play_results",  "INTEGER"),
+            ("conflict",    "tracked_plays", "INTEGER NOT NULL DEFAULT 0"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
@@ -113,6 +115,46 @@ def init_db():
             """)
         except Exception as e:
             log.warning(f"fair_ml backfill warning: {e}")
+
+        # ── Backfill play_results.opp_book_ml (fade price) ─────────────
+        # First from tracked_plays (exact track-time opponent line), then
+        # from game_cache snapshots for anything still missing.
+        try:
+            conn.execute("""
+                UPDATE play_results
+                SET opp_book_ml = (
+                    SELECT tp.opp_book_ml FROM tracked_plays tp
+                    WHERE tp.game_id = play_results.game_id
+                      AND tp.team_abbrev = play_results.team_abbrev
+                      AND tp.window = play_results.window
+                      AND tp.opp_book_ml IS NOT NULL
+                    LIMIT 1
+                )
+                WHERE opp_book_ml IS NULL
+            """)
+
+            needing = conn.execute(
+                "SELECT id, game_id, opponent_abbrev FROM play_results WHERE opp_book_ml IS NULL"
+            ).fetchall()
+            if needing:
+                price: dict[int, dict] = {}
+                for (payload,) in conn.execute("SELECT payload FROM game_cache").fetchall():
+                    for g in json.loads(payload):
+                        aw, hw = g.get("away", {}), g.get("home", {})
+                        if aw.get("book_ml") is not None and hw.get("book_ml") is not None:
+                            price[g["game_id"]] = {aw["abbrev"]: aw["book_ml"], hw["abbrev"]: hw["book_ml"]}
+                updated = 0
+                for row in needing:
+                    pg = price.get(row["game_id"])
+                    if pg and row["opponent_abbrev"] in pg:
+                        conn.execute(
+                            "UPDATE play_results SET opp_book_ml=? WHERE id=?",
+                            (pg[row["opponent_abbrev"]], row["id"]),
+                        )
+                        updated += 1
+                log.info(f"opp_book_ml backfill: {updated} rows from game_cache")
+        except Exception as e:
+            log.warning(f"opp_book_ml backfill warning: {e}")
 
         # ── Backfill conflict flag for existing opposing-side plays ────
         try:
@@ -163,15 +205,16 @@ def save_result(
     game_date: str, game_id: int, team_abbrev: str, opponent_abbrev: str,
     book_ml: int, edge_pct: str, result: str, units_gained: float,
     window: str = 'season', fair_ml: int | None = None,
+    opp_book_ml: int | None = None,
 ) -> int:
     with _connect() as conn:
         cur = conn.execute(
             """INSERT INTO play_results
                (game_date, game_id, team_abbrev, opponent_abbrev,
-                book_ml, edge_pct, result, units_gained, window, fair_ml)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                book_ml, edge_pct, result, units_gained, window, fair_ml, opp_book_ml)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (game_date, game_id, team_abbrev, opponent_abbrev,
-             book_ml, edge_pct, result, units_gained, window, fair_ml),
+             book_ml, edge_pct, result, units_gained, window, fair_ml, opp_book_ml),
         )
         return cur.lastrowid
 
@@ -326,15 +369,16 @@ def save_tracked_play(
     game_date: str, game_id: int, team_abbrev: str, team_name: str,
     opponent_abbrev: str, side: str, book_ml: int, book_name: str,
     edge_pct: str, window: str = 'season', fair_ml: int | None = None,
+    opp_book_ml: int | None = None,
 ) -> int:
     with _connect() as conn:
         cur = conn.execute(
             """INSERT INTO tracked_plays
                (game_date, game_id, team_abbrev, team_name, opponent_abbrev,
-                side, book_ml, book_name, edge_pct, window, fair_ml)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                side, book_ml, book_name, edge_pct, window, fair_ml, opp_book_ml)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (game_date, game_id, team_abbrev, team_name, opponent_abbrev,
-             side, book_ml, book_name, edge_pct, window, fair_ml),
+             side, book_ml, book_name, edge_pct, window, fair_ml, opp_book_ml),
         )
         return cur.lastrowid
 

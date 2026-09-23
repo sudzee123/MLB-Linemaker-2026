@@ -300,6 +300,7 @@ def _auto_track(games: list[dict], game_date: str, force: bool = False):
                 continue
 
             opp_abbrev = game[opp_key]["abbrev"]
+            opp_book_ml = game[opp_key].get("book_ml")
             book_ml = side["book_ml"]
             book_name = side.get("book_name", "")
             team_name = side["team_name"]
@@ -327,6 +328,7 @@ def _auto_track(games: list[dict], game_date: str, force: bool = False):
                     game_date, game["game_id"], team_abbrev, team_name,
                     opp_abbrev, side_label, book_ml, book_name,
                     w["edge_pct"], window=wname, fair_ml=w["fair_ml"],
+                    opp_book_ml=opp_book_ml,
                 )
                 if db.is_opponent_tracked(game["game_id"], opp_abbrev):
                     db.mark_game_conflict(game["game_id"])
@@ -557,39 +559,70 @@ def get_results_summary(
     jsp_max: int | None = Query(default=None),
     team: str | None = Query(default=None),
     prev_loss_filter: bool = Query(default=False),
+    mode: str = Query(default="on", description="on = play the model side, against = fade it"),
 ):
     results = db.load_results(window, start_date, end_date, min_edge, max_edge,
                               ml_min, ml_max, jsp_min, jsp_max, team, prev_loss_filter)
-    wins = sum(1 for r in results if r["result"] == "W")
-    losses = len(results) - wins
-    net_units = sum(r["units_gained"] for r in results)
-    roi_pct = (net_units / len(results) * 100) if results else 0.0
+
+    # Normalize each row into a display record for the requested mode.
+    # "on"  = bet the model's side at its book_ml.
+    # "against" = fade it: bet the opponent at opp_book_ml, outcome inverts.
+    # Fade units need the opponent price; a fade-win with no stored price is
+    # left unpriced (counts in the record, excluded from unit/ROI math).
+    display = []
+    for r in results:
+        if mode == "against":
+            fade_result = "L" if r["result"] == "W" else "W"
+            if fade_result == "L":            # model side won → fade loses -1u
+                units = -1.0
+            else:                              # model side lost → fade wins
+                opp = r["opp_book_ml"]
+                units = _calc_units(opp, "W") if opp is not None else None
+            display.append({
+                "id": r["id"], "date": r["game_date"],
+                "team": r["opponent_abbrev"], "opponent": r["team_abbrev"],
+                "window": r["window"],
+                "book_ml": r["opp_book_ml"],
+                "fair_ml": None, "edge_pct": "—",
+                "result": fade_result, "units": units,
+            })
+        else:
+            display.append({
+                "id": r["id"], "date": r["game_date"],
+                "team": r["team_abbrev"], "opponent": r["opponent_abbrev"],
+                "window": r["window"],
+                "book_ml": r["book_ml"],
+                "fair_ml": r["fair_ml"], "edge_pct": r["edge_pct"],
+                "result": r["result"], "units": round(r["units_gained"], 3),
+            })
+
+    wins = sum(1 for d in display if d["result"] == "W")
+    losses = len(display) - wins
+    priced = [d for d in display if d["units"] is not None]
+    net_units = sum(d["units"] for d in priced)
+    roi_pct = (net_units / len(priced) * 100) if priced else 0.0
 
     cumulative = 0.0
     chart_data = []
-    for i, r in enumerate(results, 1):
-        cumulative += r["units_gained"]
+    for i, d in enumerate(display, 1):
+        if d["units"] is not None:
+            cumulative += d["units"]
         chart_data.append({
-            "id": r["id"],
-            "play_num": i,
-            "date": r["game_date"],
-            "team": r["team_abbrev"],
-            "opponent": r["opponent_abbrev"],
-            "window": r["window"],
-            "book_ml": r["book_ml"],
-            "fair_ml": r["fair_ml"],
-            "edge_pct": r["edge_pct"],
-            "result": r["result"],
-            "units": round(r["units_gained"], 3),
+            "id": d["id"], "play_num": i, "date": d["date"],
+            "team": d["team"], "opponent": d["opponent"], "window": d["window"],
+            "book_ml": d["book_ml"], "fair_ml": d["fair_ml"], "edge_pct": d["edge_pct"],
+            "result": d["result"],
+            "units": round(d["units"], 3) if d["units"] is not None else None,
             "cumulative_units": round(cumulative, 3),
         })
 
     return {
         "wins": wins,
         "losses": losses,
-        "total_plays": len(results),
+        "total_plays": len(display),
         "net_units": round(net_units, 3),
         "roi_pct": round(roi_pct, 1),
+        "unpriced": len(display) - len(priced),
         "chart_data": chart_data,
     }
 
@@ -730,6 +763,7 @@ def auto_settle_plays(
                 play["game_date"], play["game_id"], play["team_abbrev"],
                 play["opponent_abbrev"], play["book_ml"], play["edge_pct"],
                 result, units, play["window"], fair_ml=play.get("fair_ml"),
+                opp_book_ml=play.get("opp_book_ml"),
             )
         except Exception:
             pass  # unique constraint — already settled via another window, still mark settled
@@ -827,6 +861,7 @@ def settle_group(payload: SettleGroupIn):
             play["game_date"], play["game_id"], play["team_abbrev"],
             play["opponent_abbrev"], play["book_ml"], play["edge_pct"],
             payload.result, units, play["window"], fair_ml=play.get("fair_ml"),
+            opp_book_ml=play.get("opp_book_ml"),
         )
         result_ids.append(result_id)
 

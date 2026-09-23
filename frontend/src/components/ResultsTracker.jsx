@@ -32,7 +32,7 @@ function collapseByDay(data) {
   const byDate = {}
   for (const d of data) {
     if (!byDate[d.date]) byDate[d.date] = { date: d.date, units: 0, game_count: 0 }
-    byDate[d.date].units = Math.round((byDate[d.date].units + d.units) * 1000) / 1000
+    byDate[d.date].units = Math.round((byDate[d.date].units + (d.units ?? 0)) * 1000) / 1000
     byDate[d.date].game_count += 1
   }
   let cumulative = 0
@@ -148,7 +148,7 @@ function UnitChart({ rawData, mode = 'game' }) {
         // Convert SVG coords → percentage → CSS position
         const leftPct = (svgX / VW * 100).toFixed(1)
         const topPct = (svgY / VH * 100).toFixed(1)
-        const unitsStr = d.units >= 0 ? `+${d.units}` : `${d.units}`
+        const unitsStr = d.units == null ? '—' : (d.units >= 0 ? `+${d.units}` : `${d.units}`)
         const runStr = d.cumulative_units >= 0 ? `+${d.cumulative_units}` : `${d.cumulative_units}`
         return (
           <div className="chart-tooltip" style={{ left: `${leftPct}%`, top: `${topPct}%` }}>
@@ -288,7 +288,9 @@ function HistoryTable({ chartData, onUpdate, onDelete }) {
             <span className="rh-ml">{r.fair_ml != null ? fmt(r.fair_ml) : '—'}</span>
             <span className="rh-edge">{r.edge_pct}</span>
             <span className={`rh-result ${r.result === 'W' ? 'green' : 'red'}`}>{r.result}</span>
-            <span className={unitPos ? 'green' : 'red'}>{unitPos ? '+' : ''}{r.units}u</span>
+            {r.units == null
+              ? <span className="rh-ml">—</span>
+              : <span className={unitPos ? 'green' : 'red'}>{unitPos ? '+' : ''}{r.units}u</span>}
             <span className={runPos ? 'green' : 'red'}>{runPos ? '+' : ''}{r.cumulative_units}u</span>
             <span className="rh-row-actions">
               <button className="rh-edit" onClick={() => startEdit(r)} title="Edit this result">✎</button>
@@ -376,6 +378,22 @@ function WindowSelector({ window, onChange }) {
         <button
           key={key}
           className={`ws-btn${window === key ? ' ws-active' : ''}`}
+          onClick={() => onChange(key)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function ModeToggle({ mode, onChange }) {
+  return (
+    <div className="mode-toggle" title="On = play the model side · Against = fade it">
+      {[['on', 'On'], ['against', 'Against']].map(([key, label]) => (
+        <button
+          key={key}
+          className={`mt-btn${mode === key ? ' mt-active' : ''}`}
           onClick={() => onChange(key)}
         >
           {label}
@@ -604,6 +622,7 @@ export default function ResultsTracker({
   jspMin, onJspMinChange, jspMax, onJspMaxChange,
   team, onTeamChange,
   prevLossFilter, onPrevLossFilterChange,
+  mode, onModeChange,
 }) {
   const isFiltered = startDate || endDate || minEdge !== '' || maxEdge !== '' || mlMin !== '' || mlMax !== '' || jspMin !== '' || jspMax !== '' || team !== '' || prevLossFilter
 
@@ -664,7 +683,10 @@ export default function ResultsTracker({
 
   return (
     <div className="results-tracker">
-      <WindowSelector window={window} onChange={onWindowChange} />
+      <div className="rt-selectors">
+        <WindowSelector window={window} onChange={onWindowChange} />
+        <ModeToggle mode={mode} onChange={onModeChange} />
+      </div>
       <div className="backfill-row">
         <BackfillButton onRefresh={onRefresh} />
         {summary?.chart_data?.length > 0 && (
@@ -672,6 +694,14 @@ export default function ResultsTracker({
         )}
       </div>
       <ResultsFilter {...filterProps} />
+
+      {mode === 'against' && summary.unpriced > 0 && (
+        <div className="rt-note">
+          {summary.unpriced} fade {summary.unpriced === 1 ? 'win lacks' : 'wins lack'} a
+          recorded opponent price and {summary.unpriced === 1 ? 'is' : 'are'} excluded from
+          units/ROI (still counted in the record).
+        </div>
+      )}
 
       {/* Stats pills */}
       <div className="summary-bar">

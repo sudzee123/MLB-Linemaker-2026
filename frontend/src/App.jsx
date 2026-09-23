@@ -27,6 +27,7 @@ export default function App() {
     jspMin, setJspMin, jspMax, setJspMax,
     team, setTeam,
     prevLossFilter, setPrevLossFilter,
+    mode, setMode,
   } = useResults()
 
   const { grouped, loading: playsLoading, settleGroup, removeGroup } = usePlays()
@@ -195,6 +196,8 @@ export default function App() {
             onTeamChange={setTeam}
             prevLossFilter={prevLossFilter}
             onPrevLossFilterChange={setPrevLossFilter}
+            mode={mode}
+            onModeChange={setMode}
           />
         )}
 

@@ -17,6 +17,7 @@ export function useResults() {
   const [jspMax, setJspMax] = useState('')
   const [team, setTeam] = useState('')
   const [prevLossFilter, setPrevLossFilter] = useState(false)
+  const [mode, setMode] = useState('on') // on | against
 
   const fetchSummary = useCallback(async () => {
     setLoading(true)
@@ -39,6 +40,7 @@ export function useResults() {
         if (jspMax !== '') params.set('jsp_max', jspMax)
         if (team !== '') params.set('team', team)
         if (prevLossFilter) params.set('prev_loss_filter', 'true')
+        if (mode !== 'on') params.set('mode', mode)
         const res = await fetch(`${API}/results/summary?${params.toString()}`)
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         setSummary(await res.json())
@@ -49,7 +51,7 @@ export function useResults() {
     } finally {
       setLoading(false)
     }
-  }, [window, startDate, endDate, minEdge, maxEdge, mlMin, mlMax, jspMin, jspMax, team, prevLossFilter])
+  }, [window, startDate, endDate, minEdge, maxEdge, mlMin, mlMax, jspMin, jspMax, team, prevLossFilter, mode])
 
   useEffect(() => { fetchSummary() }, [fetchSummary])
 
@@ -95,5 +97,6 @@ export function useResults() {
     jspMin, setJspMin, jspMax, setJspMax,
     team, setTeam,
     prevLossFilter, setPrevLossFilter,
+    mode, setMode,
   }
 }
