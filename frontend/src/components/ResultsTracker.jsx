@@ -680,6 +680,12 @@ export default function ResultsTracker({
           <span className="pill-value">{summary.wins}–{summary.losses}</span>
         </div>
         <div className="stat-pill">
+          <span className="pill-label">Win %</span>
+          <span className="pill-value">
+            {summary.total_plays > 0 ? (summary.wins / summary.total_plays * 100).toFixed(1) : '0.0'}%
+          </span>
+        </div>
+        <div className="stat-pill">
           <span className="pill-label">Net Units</span>
           <span className={`pill-value ${netPos ? 'green' : 'red'}`}>
             {netPos ? '+' : ''}{summary.net_units}u
