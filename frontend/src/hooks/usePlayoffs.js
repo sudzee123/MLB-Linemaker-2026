@@ -51,5 +51,15 @@ export function usePlayoffs() {
     setSeries(prev => ({ ...prev, [key]: { ...(prev[key] || {}), [field]: value } }))
   }, [])
 
-  return { teams, seeds, setSeed, series, setSeriesField, saveStatus }
+  // Per-team line entry: series[key].lines[abbr] = { my, book }
+  const setLine = useCallback((key, abbr, field, value) => {
+    setSeries(prev => {
+      const s = prev[key] || {}
+      const lines = { ...(s.lines || {}) }
+      lines[abbr] = { ...(lines[abbr] || {}), [field]: value }
+      return { ...prev, [key]: { ...s, lines } }
+    })
+  }, [])
+
+  return { teams, seeds, setSeed, series, setSeriesField, setLine, saveStatus }
 }

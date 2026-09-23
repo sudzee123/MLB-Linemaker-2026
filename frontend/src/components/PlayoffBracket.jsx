@@ -35,26 +35,51 @@ const SEED_LABELS = {
 
 // ── Series card ───────────────────────────────────────────────────────────────
 
-function SeriesCard({ seriesKey, title, sub, bestOf, seeds, series, setSeriesField }) {
+function SeriesCard({ seriesKey, title, sub, bestOf, seeds, series, setSeriesField, setLine }) {
   const [a, b] = teamsForSeries(seriesKey, seeds, series)
   const pick = validPick(seriesKey, seeds, series)
-  const data = series[seriesKey] || {}
+  const lines = series[seriesKey]?.lines || {}
 
   const choose = (team) => {
     if (!team) return
     setSeriesField(seriesKey, 'pick', pick === team ? '' : team)
   }
 
-  const TeamRow = ({ team }) => (
-    <button
-      className={`pb-team${pick === team && team ? ' pb-team-win' : ''}${!team ? ' pb-team-empty' : ''}`}
-      onClick={() => choose(team)}
-      disabled={!team}
-    >
-      <span className="pb-team-abbr">{team || '—'}</span>
-      {pick === team && team && <span className="pb-check">✓</span>}
-    </button>
-  )
+  const TeamBlock = ({ team }) => {
+    const l = lines[team] || {}
+    return (
+      <div className="pb-teamblock">
+        <button
+          className={`pb-team${pick === team && team ? ' pb-team-win' : ''}${!team ? ' pb-team-empty' : ''}`}
+          onClick={() => choose(team)}
+          disabled={!team}
+        >
+          <span className="pb-team-abbr">{team || '—'}</span>
+          {pick === team && team && <span className="pb-check">✓</span>}
+        </button>
+        <div className="pb-lines">
+          <input
+            className="pb-line-input"
+            type="text"
+            value={l.my || ''}
+            onChange={e => setLine(seriesKey, team, 'my', e.target.value)}
+            placeholder="My"
+            title="My line for this team"
+            disabled={!team}
+          />
+          <input
+            className="pb-line-input"
+            type="text"
+            value={l.book || ''}
+            onChange={e => setLine(seriesKey, team, 'book', e.target.value)}
+            placeholder="Book"
+            title="Book line for this team"
+            disabled={!team}
+          />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="pb-series">
@@ -62,24 +87,8 @@ function SeriesCard({ seriesKey, title, sub, bestOf, seeds, series, setSeriesFie
         <span className="pb-series-title">{title}</span>
         <span className="pb-series-sub">{sub} · Bo{bestOf}</span>
       </div>
-      <TeamRow team={a} />
-      <TeamRow team={b} />
-      <div className="pb-lines">
-        <input
-          className="pb-line-input"
-          type="text"
-          value={data.my_line || ''}
-          onChange={e => setSeriesField(seriesKey, 'my_line', e.target.value)}
-          placeholder="My line"
-        />
-        <input
-          className="pb-line-input"
-          type="text"
-          value={data.book_line || ''}
-          onChange={e => setSeriesField(seriesKey, 'book_line', e.target.value)}
-          placeholder="Book line"
-        />
-      </div>
+      <TeamBlock team={a} />
+      <TeamBlock team={b} />
     </div>
   )
 }
@@ -121,8 +130,8 @@ function SeedRow({ league, teams, seeds, setSeed }) {
 
 // ── League block ──────────────────────────────────────────────────────────────
 
-function LeagueBlock({ league, teams, seeds, setSeed, series, setSeriesField }) {
-  const common = { seeds, series, setSeriesField }
+function LeagueBlock({ league, teams, seeds, setSeed, series, setSeriesField, setLine }) {
+  const common = { seeds, series, setSeriesField, setLine }
   return (
     <div className="pb-league">
       <div className="pb-league-label">{league === 'AL' ? 'American League' : 'National League'}</div>
@@ -150,7 +159,7 @@ function LeagueBlock({ league, teams, seeds, setSeed, series, setSeriesField }) 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function PlayoffBracket() {
-  const { teams, seeds, setSeed, series, setSeriesField, saveStatus } = usePlayoffs()
+  const { teams, seeds, setSeed, series, setSeriesField, setLine, saveStatus } = usePlayoffs()
 
   return (
     <div className="playoff-bracket">
@@ -164,12 +173,12 @@ export default function PlayoffBracket() {
         </span>
       </div>
 
-      <LeagueBlock league="AL" teams={teams} seeds={seeds} setSeed={setSeed} series={series} setSeriesField={setSeriesField} />
-      <LeagueBlock league="NL" teams={teams} seeds={seeds} setSeed={setSeed} series={series} setSeriesField={setSeriesField} />
+      <LeagueBlock league="AL" teams={teams} seeds={seeds} setSeed={setSeed} series={series} setSeriesField={setSeriesField} setLine={setLine} />
+      <LeagueBlock league="NL" teams={teams} seeds={seeds} setSeed={setSeed} series={series} setSeriesField={setSeriesField} setLine={setLine} />
 
       <div className="pb-ws">
         <div className="pb-round-label">World Series</div>
-        <SeriesCard seriesKey="WS" title="WS" sub="AL v NL" bestOf={7} seeds={seeds} series={series} setSeriesField={setSeriesField} />
+        <SeriesCard seriesKey="WS" title="WS" sub="AL v NL" bestOf={7} seeds={seeds} series={series} setSeriesField={setSeriesField} setLine={setLine} />
       </div>
     </div>
   )

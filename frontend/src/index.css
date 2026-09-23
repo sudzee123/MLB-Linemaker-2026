@@ -1237,8 +1237,9 @@ button {
   padding: 0.5rem;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.5rem;
 }
+.pb-teamblock { display: flex; flex-direction: column; gap: 0.25rem; }
 .pb-series-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.15rem; }
 .pb-series-title { font-family: var(--mono); font-size: 0.7rem; font-weight: 700; color: var(--text); }
 .pb-series-sub { font-family: var(--mono); font-size: 0.6rem; color: var(--text-dim); }
@@ -1260,7 +1261,7 @@ button {
 .pb-team-abbr { font-family: var(--mono); font-size: 0.8rem; font-weight: 700; color: var(--text); }
 .pb-check { color: var(--green); font-size: 0.75rem; }
 
-.pb-lines { display: flex; gap: 0.3rem; margin-top: 0.15rem; }
+.pb-lines { display: flex; gap: 0.3rem; }
 .pb-line-input {
   flex: 1;
   min-width: 0;
