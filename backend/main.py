@@ -539,7 +539,7 @@ def add_result(payload: PlayResultIn):
     result_id = db.save_result(
         payload.game_date, payload.game_id, payload.team_abbrev,
         payload.opponent_abbrev, payload.book_ml, payload.edge_pct,
-        payload.result, units, payload.window,
+        payload.result, units, payload.window, fair_ml=payload.fair_ml,
     )
     return {"id": result_id, "units_gained": units}
 
@@ -553,10 +553,13 @@ def get_results_summary(
     max_edge: float | None = Query(default=None),
     ml_min: int | None = Query(default=None),
     ml_max: int | None = Query(default=None),
+    jsp_min: int | None = Query(default=None),
+    jsp_max: int | None = Query(default=None),
     team: str | None = Query(default=None),
     prev_loss_filter: bool = Query(default=False),
 ):
-    results = db.load_results(window, start_date, end_date, min_edge, max_edge, ml_min, ml_max, team, prev_loss_filter)
+    results = db.load_results(window, start_date, end_date, min_edge, max_edge,
+                              ml_min, ml_max, jsp_min, jsp_max, team, prev_loss_filter)
     wins = sum(1 for r in results if r["result"] == "W")
     losses = len(results) - wins
     net_units = sum(r["units_gained"] for r in results)
@@ -574,6 +577,7 @@ def get_results_summary(
             "opponent": r["opponent_abbrev"],
             "window": r["window"],
             "book_ml": r["book_ml"],
+            "fair_ml": r["fair_ml"],
             "edge_pct": r["edge_pct"],
             "result": r["result"],
             "units": round(r["units_gained"], 3),
@@ -725,7 +729,7 @@ def auto_settle_plays(
             db.save_result(
                 play["game_date"], play["game_id"], play["team_abbrev"],
                 play["opponent_abbrev"], play["book_ml"], play["edge_pct"],
-                result, units, play["window"],
+                result, units, play["window"], fair_ml=play.get("fair_ml"),
             )
         except Exception:
             pass  # unique constraint — already settled via another window, still mark settled
@@ -822,7 +826,7 @@ def settle_group(payload: SettleGroupIn):
         result_id = db.save_result(
             play["game_date"], play["game_id"], play["team_abbrev"],
             play["opponent_abbrev"], play["book_ml"], play["edge_pct"],
-            payload.result, units, play["window"],
+            payload.result, units, play["window"], fair_ml=play.get("fair_ml"),
         )
         result_ids.append(result_id)
 
@@ -952,7 +956,7 @@ def backfill_windows():
                     db.save_result(
                         r['game_date'], r['game_id'], r['team_abbrev'],
                         r['opponent_abbrev'], r['book_ml'], w['edge_pct'],
-                        r['result'], r['units_gained'], wname,
+                        r['result'], r['units_gained'], wname, fair_ml=w.get('fair_ml'),
                     )
                     existing[wname].add(key)
                     entries_created += 1

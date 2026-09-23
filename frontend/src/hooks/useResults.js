@@ -13,6 +13,8 @@ export function useResults() {
   const [maxEdge, setMaxEdge] = useState('10')
   const [mlMin, setMlMin] = useState('-109')
   const [mlMax, setMlMax] = useState('')
+  const [jspMin, setJspMin] = useState('')
+  const [jspMax, setJspMax] = useState('')
   const [team, setTeam] = useState('')
   const [prevLossFilter, setPrevLossFilter] = useState(false)
 
@@ -33,6 +35,8 @@ export function useResults() {
         if (maxEdge !== '') params.set('max_edge', maxEdge)
         if (mlMin !== '') params.set('ml_min', mlMin)
         if (mlMax !== '') params.set('ml_max', mlMax)
+        if (jspMin !== '') params.set('jsp_min', jspMin)
+        if (jspMax !== '') params.set('jsp_max', jspMax)
         if (team !== '') params.set('team', team)
         if (prevLossFilter) params.set('prev_loss_filter', 'true')
         const res = await fetch(`${API}/results/summary?${params.toString()}`)
@@ -45,7 +49,7 @@ export function useResults() {
     } finally {
       setLoading(false)
     }
-  }, [window, startDate, endDate, minEdge, maxEdge, mlMin, mlMax, team, prevLossFilter])
+  }, [window, startDate, endDate, minEdge, maxEdge, mlMin, mlMax, jspMin, jspMax, team, prevLossFilter])
 
   useEffect(() => { fetchSummary() }, [fetchSummary])
 
@@ -88,6 +92,7 @@ export function useResults() {
     window, setWindow,
     startDate, setStartDate, endDate, setEndDate,
     minEdge, setMinEdge, maxEdge, setMaxEdge, mlMin, setMlMin, mlMax, setMlMax,
+    jspMin, setJspMin, jspMax, setJspMax,
     team, setTeam,
     prevLossFilter, setPrevLossFilter,
   }

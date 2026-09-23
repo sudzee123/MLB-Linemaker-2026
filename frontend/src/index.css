@@ -485,7 +485,7 @@ button {
 
 .rh-header {
   display: grid;
-  grid-template-columns: 90px 1fr 52px 56px 36px 60px 72px 28px;
+  grid-template-columns: 90px 1fr 52px 52px 56px 36px 60px 72px 28px;
   gap: 0.25rem;
   padding: 0.5rem 0.75rem;
   background: rgba(255,255,255,0.02);
@@ -498,7 +498,7 @@ button {
 
 .rh-row {
   display: grid;
-  grid-template-columns: 90px 1fr 52px 56px 36px 60px 72px 28px;
+  grid-template-columns: 90px 1fr 52px 52px 56px 36px 60px 72px 28px;
   gap: 0.25rem;
   padding: 0.45rem 0.75rem;
   border-bottom: 1px solid rgba(255,255,255,0.03);
@@ -616,7 +616,7 @@ button {
   .refresh-btn { margin-left: 0; }
 
   .rh-header, .rh-row {
-    grid-template-columns: 80px 1fr 44px 44px 30px 52px 64px 24px;
+    grid-template-columns: 80px 1fr 44px 44px 44px 30px 52px 64px 24px;
     font-size: 0.65rem;
   }
 }

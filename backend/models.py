@@ -59,6 +59,7 @@ class PlayResultIn(BaseModel):
     edge_pct: str
     result: str   # 'W' or 'L'
     window: str = 'season'
+    fair_ml: int | None = None
 
 
 class PlayResultUpdate(BaseModel):

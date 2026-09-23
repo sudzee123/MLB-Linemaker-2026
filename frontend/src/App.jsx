@@ -24,6 +24,7 @@ export default function App() {
     window: resultWindow, setWindow: setResultWindow,
     startDate, setStartDate, endDate, setEndDate,
     minEdge, setMinEdge, maxEdge, setMaxEdge, mlMin, setMlMin, mlMax, setMlMax,
+    jspMin, setJspMin, jspMax, setJspMax,
     team, setTeam,
     prevLossFilter, setPrevLossFilter,
   } = useResults()
@@ -186,6 +187,10 @@ export default function App() {
             onMlMinChange={setMlMin}
             mlMax={mlMax}
             onMlMaxChange={setMlMax}
+            jspMin={jspMin}
+            onJspMinChange={setJspMin}
+            jspMax={jspMax}
+            onJspMaxChange={setJspMax}
             team={team}
             onTeamChange={setTeam}
             prevLossFilter={prevLossFilter}

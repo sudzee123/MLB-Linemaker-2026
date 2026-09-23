@@ -86,6 +86,7 @@ def init_db():
             ("window",    "play_results",  "TEXT NOT NULL DEFAULT 'season'"),
             ("window",    "tracked_plays", "TEXT NOT NULL DEFAULT 'season'"),
             ("fair_ml",   "tracked_plays", "INTEGER"),
+            ("fair_ml",   "play_results",  "INTEGER"),
             ("conflict",  "tracked_plays", "INTEGER NOT NULL DEFAULT 0"),
         ]:
             try:
@@ -93,6 +94,25 @@ def init_db():
                 log.info(f"Migration: added {table}.{col}")
             except Exception:
                 pass  # column already exists
+
+        # ── Backfill play_results.fair_ml from matching tracked_plays ──
+        # tracked_plays retains the model's projected line (fair_ml) after
+        # settling; copy it into any play_results row still missing it.
+        try:
+            conn.execute("""
+                UPDATE play_results
+                SET fair_ml = (
+                    SELECT tp.fair_ml FROM tracked_plays tp
+                    WHERE tp.game_id = play_results.game_id
+                      AND tp.team_abbrev = play_results.team_abbrev
+                      AND tp.window = play_results.window
+                      AND tp.fair_ml IS NOT NULL
+                    LIMIT 1
+                )
+                WHERE fair_ml IS NULL
+            """)
+        except Exception as e:
+            log.warning(f"fair_ml backfill warning: {e}")
 
         # ── Backfill conflict flag for existing opposing-side plays ────
         try:
@@ -142,16 +162,16 @@ def init_db():
 def save_result(
     game_date: str, game_id: int, team_abbrev: str, opponent_abbrev: str,
     book_ml: int, edge_pct: str, result: str, units_gained: float,
-    window: str = 'season',
+    window: str = 'season', fair_ml: int | None = None,
 ) -> int:
     with _connect() as conn:
         cur = conn.execute(
             """INSERT INTO play_results
                (game_date, game_id, team_abbrev, opponent_abbrev,
-                book_ml, edge_pct, result, units_gained, window)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                book_ml, edge_pct, result, units_gained, window, fair_ml)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (game_date, game_id, team_abbrev, opponent_abbrev,
-             book_ml, edge_pct, result, units_gained, window),
+             book_ml, edge_pct, result, units_gained, window, fair_ml),
         )
         return cur.lastrowid
 
@@ -164,6 +184,8 @@ def load_results(
     max_edge: float | None = None,
     ml_min: int | None = None,
     ml_max: int | None = None,
+    jsp_min: int | None = None,
+    jsp_max: int | None = None,
     team: str | None = None,
     prev_loss_filter: bool = False,
 ) -> list[dict]:
@@ -191,6 +213,12 @@ def load_results(
     if ml_max is not None:
         conditions.append("book_ml <= ?")
         params.append(ml_max)
+    if jsp_min is not None:
+        conditions.append("fair_ml IS NOT NULL AND fair_ml >= ?")
+        params.append(jsp_min)
+    if jsp_max is not None:
+        conditions.append("fair_ml IS NOT NULL AND fair_ml <= ?")
+        params.append(jsp_max)
     if team:
         conditions.append("UPPER(team_abbrev) LIKE UPPER(?)")
         params.append(f'%{team}%')

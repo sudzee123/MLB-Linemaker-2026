@@ -233,6 +233,7 @@ function HistoryTable({ chartData, onUpdate, onDelete }) {
         <span>Date</span>
         <span>Play</span>
         <span>ML</span>
+        <span title="Model projected/fair line">JSP</span>
         <span>Edge</span>
         <span>W/L</span>
         <span>Units</span>
@@ -252,6 +253,7 @@ function HistoryTable({ chartData, onUpdate, onDelete }) {
                 onChange={e => setDraft(d => ({ ...d, book_ml: e.target.value }))}
                 title="Book ML"
               />
+              <span className="rh-edit-spacer" />
               <input
                 className="rh-edit-input"
                 type="text"
@@ -283,6 +285,7 @@ function HistoryTable({ chartData, onUpdate, onDelete }) {
             <span className="rh-date">{r.date}</span>
             <span className="rh-team">{r.team} vs {r.opponent}</span>
             <span className="rh-ml">{fmt(r.book_ml)}</span>
+            <span className="rh-ml">{r.fair_ml != null ? fmt(r.fair_ml) : '—'}</span>
             <span className="rh-edge">{r.edge_pct}</span>
             <span className={`rh-result ${r.result === 'W' ? 'green' : 'red'}`}>{r.result}</span>
             <span className={unitPos ? 'green' : 'red'}>{unitPos ? '+' : ''}{r.units}u</span>
@@ -446,14 +449,16 @@ function ResultsFilter({
   startDate, endDate, onStartDateChange, onEndDateChange,
   minEdge, onMinEdgeChange, maxEdge, onMaxEdgeChange,
   mlMin, onMlMinChange, mlMax, onMlMaxChange,
+  jspMin, onJspMinChange, jspMax, onJspMaxChange,
   team, onTeamChange,
   prevLossFilter, onPrevLossFilterChange,
 }) {
-  const isFiltered = startDate || endDate || minEdge !== '' || maxEdge !== '' || mlMin !== '' || mlMax !== '' || team !== '' || prevLossFilter
+  const isFiltered = startDate || endDate || minEdge !== '' || maxEdge !== '' || mlMin !== '' || mlMax !== '' || jspMin !== '' || jspMax !== '' || team !== '' || prevLossFilter
 
   function clearAll() {
     onStartDateChange(''); onEndDateChange('')
     onMinEdgeChange(''); onMaxEdgeChange(''); onMlMinChange(''); onMlMaxChange('')
+    onJspMinChange(''); onJspMaxChange('')
     onTeamChange('')
     onPrevLossFilterChange(false)
   }
@@ -533,9 +538,32 @@ function ResultsFilter({
         )}
       </div>
 
-      {/* Row 3: team filter */}
+      {/* Row 3: JSP (projected line) range + team filter */}
       <div className="rf-row rf-row-divider">
-        <span className="drf-label">Team</span>
+        <span className="drf-label" title="Model's projected/fair moneyline">JSP Range</span>
+        <div className="drf-inputs">
+          <input
+            type="number"
+            className="drf-input drf-number"
+            value={jspMin}
+            onChange={e => onJspMinChange(e.target.value)}
+            placeholder="Min"
+            step="5"
+            title="Minimum projected line (e.g. -200)"
+          />
+          <span className="drf-sep">→</span>
+          <input
+            type="number"
+            className="drf-input drf-number"
+            value={jspMax}
+            onChange={e => onJspMaxChange(e.target.value)}
+            placeholder="Max"
+            step="5"
+            title="Maximum projected line (e.g. +150)"
+          />
+        </div>
+
+        <span className="drf-label rf-ml-label">Team</span>
         <div className="drf-inputs">
           <input
             type="text"
@@ -573,15 +601,17 @@ export default function ResultsTracker({
   startDate, endDate, onStartDateChange, onEndDateChange,
   minEdge, onMinEdgeChange, maxEdge, onMaxEdgeChange,
   mlMin, onMlMinChange, mlMax, onMlMaxChange,
+  jspMin, onJspMinChange, jspMax, onJspMaxChange,
   team, onTeamChange,
   prevLossFilter, onPrevLossFilterChange,
 }) {
-  const isFiltered = startDate || endDate || minEdge !== '' || maxEdge !== '' || mlMin !== '' || mlMax !== '' || team !== '' || prevLossFilter
+  const isFiltered = startDate || endDate || minEdge !== '' || maxEdge !== '' || mlMin !== '' || mlMax !== '' || jspMin !== '' || jspMax !== '' || team !== '' || prevLossFilter
 
   const filterProps = {
     startDate, endDate, onStartDateChange, onEndDateChange,
     minEdge, onMinEdgeChange, maxEdge, onMaxEdgeChange,
     mlMin, onMlMinChange, mlMax, onMlMaxChange,
+    jspMin, onJspMinChange, jspMax, onJspMaxChange,
     team, onTeamChange,
     prevLossFilter, onPrevLossFilterChange,
   }
