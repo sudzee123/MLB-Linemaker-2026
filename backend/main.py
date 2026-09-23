@@ -27,6 +27,7 @@ from backend.fetchers.schedule import fetch_schedule, TEAM_ID_TO_ABBREV
 from backend.fetchers.mlb_stats import (
     fetch_team_batting,
     fetch_league_averages,
+    fetch_team_pitchers,
 )
 from backend.fetchers.odds import fetch_odds
 from backend.fetchers.historical_odds import fetch_historical_odds
@@ -421,6 +422,87 @@ def refresh(
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# ─── Manual matchup generator ─────────────────────────────────────────────────
+
+class ManualGenerateIn(BaseModel):
+    away_team_id: int
+    home_team_id: int
+    away_pitcher_id: int | None = None
+    home_pitcher_id: int | None = None
+    away_pitcher_name: str = "TBD"
+    home_pitcher_name: str = "TBD"
+    away_ml: int | None = None
+    home_ml: int | None = None
+    through_date: str | None = None
+
+
+@app.get("/api/teams")
+def get_teams():
+    """All 30 MLB teams as {team_id, abbrev, name}, sorted by name."""
+    teams = [
+        {"team_id": tid, "abbrev": ab, "name": _ABBREV_TO_NAME.get(ab, ab)}
+        for tid, ab in TEAM_ID_TO_ABBREV.items()
+    ]
+    teams.sort(key=lambda t: t["name"])
+    return teams
+
+
+@app.get("/api/teams/{team_id}/pitchers")
+def get_team_pitchers(team_id: int):
+    """Active-roster pitchers for a team as [{id, name}]."""
+    return fetch_team_pitchers(team_id)
+
+
+@app.post("/api/manual/generate")
+def manual_generate(payload: ManualGenerateIn):
+    """
+    Generate hypothetical Season/L30/L21 lines for an arbitrary matchup.
+    Book lines are optional — when provided, edges propagate; otherwise the
+    output is a pure fair-line projection. Nothing here is tracked or stored.
+    """
+    through_date = payload.through_date or _yesterday()
+
+    away_ab = TEAM_ID_TO_ABBREV.get(payload.away_team_id, "???")
+    home_ab = TEAM_ID_TO_ABBREV.get(payload.home_team_id, "???")
+
+    g = {
+        "away_team_id": payload.away_team_id,
+        "home_team_id": payload.home_team_id,
+        "away_pitcher_id": payload.away_pitcher_id,
+        "home_pitcher_id": payload.home_pitcher_id,
+        "away_pitcher_name": payload.away_pitcher_name,
+        "home_pitcher_name": payload.home_pitcher_name,
+    }
+
+    league_avgs = db.load_league_avgs(through_date) or fetch_league_averages(through_date)
+    db.save_league_avgs(through_date, league_avgs)
+
+    all_windows = {}
+    for wname in WINDOWS:
+        wstart = _window_start(through_date, wname)
+        aw, hw = _run_window(g, through_date, wstart, league_avgs, payload.away_ml, payload.home_ml)
+        all_windows[wname] = {"away": aw, "home": hw}
+
+    return {
+        "through_date": through_date,
+        "away": {
+            "team_id": payload.away_team_id,
+            "abbrev": away_ab,
+            "team_name": _ABBREV_TO_NAME.get(away_ab, away_ab),
+            "pitcher_name": payload.away_pitcher_name,
+            "book_ml": payload.away_ml,
+        },
+        "home": {
+            "team_id": payload.home_team_id,
+            "abbrev": home_ab,
+            "team_name": _ABBREV_TO_NAME.get(home_ab, home_ab),
+            "pitcher_name": payload.home_pitcher_name,
+            "book_ml": payload.home_ml,
+        },
+        "windows": all_windows,
+    }
 
 
 # ─── Results tracking ─────────────────────────────────────────────────────────

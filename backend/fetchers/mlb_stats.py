@@ -200,6 +200,35 @@ def _team_pitching_via_game_log(team_id: int, through_date: str, start_date: str
     return {"ip": round(total_ip, 2), "er": total_er, "era": era}
 
 
+# ─── Team Roster (pitchers) ──────────────────────────────────────────────────
+
+def fetch_team_pitchers(team_id: int) -> list[dict]:
+    """
+    Return the active-roster pitchers for a team as [{id, name}], sorted by name.
+    Used by the Manual matchup page for pitcher selection.
+    """
+    url = f"{MLB_API_BASE}/teams/{team_id}/roster"
+    params = {"rosterType": "active", "season": SEASON}
+    try:
+        resp = httpx.get(url, params=params, timeout=15)
+        resp.raise_for_status()
+        roster = resp.json().get("roster", [])
+    except Exception as e:
+        log.error(f"fetch_team_pitchers({team_id}) failed: {e}")
+        return []
+
+    pitchers = []
+    for entry in roster:
+        pos = entry.get("position", {})
+        if pos.get("type") == "Pitcher" or pos.get("abbreviation") == "P":
+            person = entry.get("person", {})
+            if person.get("id"):
+                pitchers.append({"id": person["id"], "name": person.get("fullName", "")})
+
+    pitchers.sort(key=lambda p: p["name"])
+    return pitchers
+
+
 # ─── League Averages ──────────────────────────────────────────────────────────
 
 def fetch_league_averages(through_date: str = None) -> dict:

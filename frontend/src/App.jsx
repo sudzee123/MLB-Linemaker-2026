@@ -6,6 +6,7 @@ import DatePicker from './components/DatePicker'
 import GameCard from './components/GameCard'
 import ResultsTracker from './components/ResultsTracker'
 import TrackedPlays from './components/TrackedPlays'
+import ManualMatchup from './components/ManualMatchup'
 import './index.css'
 
 export default function App() {
@@ -80,6 +81,12 @@ export default function App() {
               {summary.net_units >= 0 ? '+' : ''}{summary.net_units}u
             </span>
           )}
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'manual' ? 'active' : ''}`}
+          onClick={() => setActiveTab('manual')}
+        >
+          Manual
         </button>
       </div>
 
@@ -178,6 +185,9 @@ export default function App() {
             onPrevLossFilterChange={setPrevLossFilter}
           />
         )}
+
+        {/* ── Manual tab ── */}
+        {activeTab === 'manual' && <ManualMatchup />}
       </main>
 
       <footer className="footer">
