@@ -73,6 +73,13 @@ def init_db():
                 created_at TEXT DEFAULT (datetime('now'))
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS playoff_bracket (
+                name TEXT PRIMARY KEY,
+                payload TEXT NOT NULL,
+                updated_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
 
         # ── Migrations for existing databases ──────────────────────────
         for col, table, defn in [
@@ -527,5 +534,25 @@ def load_league_avgs(through_date: str) -> dict | None:
         row = conn.execute(
             "SELECT payload FROM league_avg_cache WHERE through_date=?",
             (through_date,),
+        ).fetchone()
+    return json.loads(row["payload"]) if row else None
+
+
+# ─── playoff bracket ──────────────────────────────────────────────────────────
+
+def save_bracket(name: str, payload: dict):
+    with _connect() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO playoff_bracket (name, payload, updated_at) "
+            "VALUES (?, ?, datetime('now'))",
+            (name, json.dumps(payload)),
+        )
+
+
+def load_bracket(name: str) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT payload FROM playoff_bracket WHERE name=?",
+            (name,),
         ).fetchone()
     return json.loads(row["payload"]) if row else None

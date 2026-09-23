@@ -7,6 +7,7 @@ import GameCard from './components/GameCard'
 import ResultsTracker from './components/ResultsTracker'
 import TrackedPlays from './components/TrackedPlays'
 import ManualMatchup from './components/ManualMatchup'
+import PlayoffBracket from './components/PlayoffBracket'
 import './index.css'
 
 export default function App() {
@@ -87,6 +88,12 @@ export default function App() {
           onClick={() => setActiveTab('manual')}
         >
           Manual
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'playoffs' ? 'active' : ''}`}
+          onClick={() => setActiveTab('playoffs')}
+        >
+          Playoffs
         </button>
       </div>
 
@@ -188,6 +195,9 @@ export default function App() {
 
         {/* ── Manual tab ── */}
         {activeTab === 'manual' && <ManualMatchup />}
+
+        {/* ── Playoffs tab ── */}
+        {activeTab === 'playoffs' && <PlayoffBracket />}
       </main>
 
       <footer className="footer">

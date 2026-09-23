@@ -438,6 +438,26 @@ class ManualGenerateIn(BaseModel):
     through_date: str | None = None
 
 
+class BracketIn(BaseModel):
+    payload: dict
+
+
+_EMPTY_BRACKET = {"seeds": {"AL": {}, "NL": {}}, "series": {}}
+
+
+@app.get("/api/playoffs")
+def get_playoffs():
+    """Load the saved playoff bracket, or an empty template if none exists."""
+    return db.load_bracket("default") or _EMPTY_BRACKET
+
+
+@app.put("/api/playoffs")
+def put_playoffs(body: BracketIn):
+    """Persist the full playoff bracket state (seeds, lines, picks)."""
+    db.save_bracket("default", body.payload)
+    return {"saved": True}
+
+
 @app.get("/api/teams")
 def get_teams():
     """All 30 MLB teams as {team_id, abbrev, name}, sorted by name."""
