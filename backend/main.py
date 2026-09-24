@@ -115,18 +115,6 @@ def _window_start(through_date: str, window: str) -> str | None:
     return td.strftime("%Y-%m-%d")
 
 
-def _neutral_league_avgs(league_avgs: dict) -> dict:
-    """
-    Collapse the split home/away run baselines to a single neutral one, so the
-    (unmodified) run engine produces a placement-independent line. Used for
-    team-overall / playoff projections where home-field is intentionally out.
-    """
-    h = league_avgs.get("home_rs_pg", 4.6)
-    a = league_avgs.get("away_rs_pg", 4.3)
-    mid = round((h + a) / 2, 3)
-    return {"home_rs_pg": mid, "away_rs_pg": mid}
-
-
 def _run_window(
     g: dict,
     through_date: str,
@@ -489,7 +477,6 @@ def playoff_lines(body: PlayoffLinesIn):
     through_date = _yesterday()
     league_avgs = db.load_league_avgs(through_date) or fetch_league_averages(through_date)
     db.save_league_avgs(through_date, league_avgs)
-    neutral_avgs = _neutral_league_avgs(league_avgs)  # no home/away in the line
 
     out: dict[str, dict] = {}
     for m in body.matchups:
@@ -499,7 +486,7 @@ def playoff_lines(body: PlayoffLinesIn):
                 "away_pitcher_id": "TEAM", "home_pitcher_id": "TEAM",
                 "away_pitcher_name": "Team (overall)", "home_pitcher_name": "Team (overall)",
             }
-            aw, hw = _run_window(g, through_date, None, neutral_avgs, None, None)
+            aw, hw = _run_window(g, through_date, None, league_avgs, None, None)
             out[m["key"]] = {"away_fair_ml": aw["fair_ml"], "home_fair_ml": hw["fair_ml"]}
         except Exception as e:
             log.warning(f"playoff_lines calc failed for {m.get('key')}: {e}")
@@ -553,16 +540,10 @@ def manual_generate(payload: ManualGenerateIn):
     league_avgs = db.load_league_avgs(through_date) or fetch_league_averages(through_date)
     db.save_league_avgs(through_date, league_avgs)
 
-    # When both sides are Team-overall this is a series/collective projection:
-    # drop home/away so the line is placement-neutral (matches the Playoff page).
-    calc_avgs = league_avgs
-    if payload.away_team_overall and payload.home_team_overall:
-        calc_avgs = _neutral_league_avgs(league_avgs)
-
     all_windows = {}
     for wname in WINDOWS:
         wstart = _window_start(through_date, wname)
-        aw, hw = _run_window(g, through_date, wstart, calc_avgs, payload.away_ml, payload.home_ml)
+        aw, hw = _run_window(g, through_date, wstart, league_avgs, payload.away_ml, payload.home_ml)
         all_windows[wname] = {"away": aw, "home": hw}
 
     return {

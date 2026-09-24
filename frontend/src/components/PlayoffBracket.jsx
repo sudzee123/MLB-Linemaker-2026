@@ -254,8 +254,8 @@ export default function PlayoffBracket() {
       <div className="pb-header">
         <p className="pb-intro">
           Assign teams to seed slots — each matchup auto-calculates a season fair line
-          (neutral site · team overall ERA for both sides). Edit any line to override;
-          ↻ resets to auto. Pick winners to advance the bracket. Everything saves automatically.
+          (team overall ERA for both sides). Edit any line to override; ↻ resets to auto.
+          Pick winners to advance the bracket. Everything saves automatically.
         </p>
         <span className={`pb-save pb-save-${saveStatus}`}>
           {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved' : ''}
