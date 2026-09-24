@@ -1,4 +1,11 @@
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { usePlayoffs } from '../hooks/usePlayoffs'
+
+const ALL_SERIES_KEYS = [
+  'AL-WC-A', 'AL-WC-B', 'AL-DS-1', 'AL-DS-2', 'AL-CS',
+  'NL-WC-A', 'NL-WC-B', 'NL-DS-1', 'NL-DS-2', 'NL-CS',
+  'WS',
+]
 
 // ── Bracket derivation ────────────────────────────────────────────────────────
 // Matchups follow the 12-team format. Teams for later rounds are derived from
@@ -35,10 +42,11 @@ const SEED_LABELS = {
 
 // ── Series card ───────────────────────────────────────────────────────────────
 
-function SeriesCard({ seriesKey, title, sub, bestOf, seeds, series, setSeriesField, setLine }) {
+function SeriesCard({ seriesKey, title, sub, bestOf, seeds, series, setSeriesField, setLine, autoLines }) {
   const [a, b] = teamsForSeries(seriesKey, seeds, series)
   const pick = validPick(seriesKey, seeds, series)
   const lines = series[seriesKey]?.lines || {}
+  const auto = autoLines[seriesKey]  // { away_fair_ml, home_fair_ml } — slot 0 = home
 
   const choose = (team) => {
     if (!team) return
@@ -49,6 +57,11 @@ function SeriesCard({ seriesKey, title, sub, bestOf, seeds, series, setSeriesFie
   // across the re-renders that autosave triggers on every keystroke.
   const teamBlock = (team, idx) => {
     const l = lines[team] || {}
+    const override = l.my || ''
+    const autoMl = auto ? (idx === 0 ? auto.home_fair_ml : auto.away_fair_ml) : null
+    const autoStr = autoMl != null ? String(autoMl) : ''
+    const myValue = override !== '' ? override : autoStr
+    const isOverride = override !== ''
     return (
       <div className="pb-teamblock" key={team || `empty-${idx}`}>
         <button
@@ -60,15 +73,24 @@ function SeriesCard({ seriesKey, title, sub, bestOf, seeds, series, setSeriesFie
           {pick === team && team && <span className="pb-check">✓</span>}
         </button>
         <div className="pb-lines">
-          <input
-            className="pb-line-input"
-            type="text"
-            value={l.my || ''}
-            onChange={e => setLine(seriesKey, team, 'my', e.target.value)}
-            placeholder="My"
-            title="My line for this team"
-            disabled={!team}
-          />
+          <div className="pb-my-wrap">
+            <input
+              className={`pb-line-input${!isOverride && autoStr ? ' pb-auto' : ''}`}
+              type="text"
+              value={myValue}
+              onChange={e => setLine(seriesKey, team, 'my', e.target.value)}
+              placeholder="My"
+              title={isOverride ? 'Your line (overrides auto)' : 'Auto line — model season/team-ERA'}
+              disabled={!team}
+            />
+            {isOverride && (
+              <button
+                className="pb-reset"
+                title="Reset to auto line"
+                onClick={() => setLine(seriesKey, team, 'my', '')}
+              >↻</button>
+            )}
+          </div>
           <input
             className="pb-line-input"
             type="text"
@@ -132,8 +154,8 @@ function SeedRow({ league, teams, seeds, setSeed }) {
 
 // ── League block ──────────────────────────────────────────────────────────────
 
-function LeagueBlock({ league, teams, seeds, setSeed, series, setSeriesField, setLine }) {
-  const common = { seeds, series, setSeriesField, setLine }
+function LeagueBlock({ league, teams, seeds, setSeed, series, setSeriesField, setLine, autoLines }) {
+  const common = { seeds, series, setSeriesField, setLine, autoLines }
   return (
     <div className="pb-league">
       <div className="pb-league-label">{league === 'AL' ? 'American League' : 'National League'}</div>
@@ -162,25 +184,90 @@ function LeagueBlock({ league, teams, seeds, setSeed, series, setSeriesField, se
 
 export default function PlayoffBracket() {
   const { teams, seeds, setSeed, series, setSeriesField, setLine, saveStatus } = usePlayoffs()
+  const [autoLines, setAutoLines] = useState({})
+  const cacheRef = useRef({})  // `${away_id}-${home_id}` → { away_fair_ml, home_fair_ml }
+
+  const idByAbbr = useMemo(
+    () => Object.fromEntries(teams.map(t => [t.abbrev, t.team_id])),
+    [teams],
+  )
+
+  // Every fully-populated matchup (slot 0 = home). Recomputed from seeds+picks.
+  const matchups = useMemo(() => {
+    const out = []
+    for (const key of ALL_SERIES_KEYS) {
+      const [home, away] = teamsForSeries(key, seeds, series)
+      if (home && away && idByAbbr[home] != null && idByAbbr[away] != null) {
+        out.push({ key, home, away, home_id: idByAbbr[home], away_id: idByAbbr[away] })
+      }
+    }
+    return out
+  }, [seeds, series, idByAbbr])
+
+  // Signature changes only when the matchup composition changes (not on line typing).
+  const sig = useMemo(
+    () => matchups.map(m => `${m.key}:${m.away_id}>${m.home_id}`).join('|'),
+    [matchups],
+  )
+  const matchupsRef = useRef(matchups)
+  matchupsRef.current = matchups
+
+  useEffect(() => {
+    const mm = matchupsRef.current
+    // Apply anything already cached immediately.
+    const applied = {}
+    for (const m of mm) {
+      const c = cacheRef.current[`${m.away_id}-${m.home_id}`]
+      if (c) applied[m.key] = c
+    }
+    if (Object.keys(applied).length) setAutoLines(prev => ({ ...prev, ...applied }))
+
+    const need = mm.filter(m => !cacheRef.current[`${m.away_id}-${m.home_id}`])
+    if (!need.length) return
+
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/playoffs/lines', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            matchups: need.map(m => ({ key: m.key, away_id: m.away_id, home_id: m.home_id })),
+          }),
+        })
+        if (!res.ok) return
+        const data = await res.json()
+        const add = {}
+        for (const m of need) {
+          if (data[m.key]) {
+            cacheRef.current[`${m.away_id}-${m.home_id}`] = data[m.key]
+            add[m.key] = data[m.key]
+          }
+        }
+        if (Object.keys(add).length) setAutoLines(prev => ({ ...prev, ...add }))
+      } catch { /* ignore */ }
+    }, 500)
+    return () => clearTimeout(t)
+  }, [sig])
 
   return (
     <div className="playoff-bracket">
       <div className="pb-header">
         <p className="pb-intro">
-          Assign teams to seed slots, enter your line and the book's line per series,
-          and pick winners — picks auto-advance to the next round. Everything saves automatically.
+          Assign teams to seed slots — each matchup auto-calculates a season fair line
+          (team overall ERA for both sides). Edit any line to override; ↻ resets to auto.
+          Pick winners to advance the bracket. Everything saves automatically.
         </p>
         <span className={`pb-save pb-save-${saveStatus}`}>
           {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved' : ''}
         </span>
       </div>
 
-      <LeagueBlock league="AL" teams={teams} seeds={seeds} setSeed={setSeed} series={series} setSeriesField={setSeriesField} setLine={setLine} />
-      <LeagueBlock league="NL" teams={teams} seeds={seeds} setSeed={setSeed} series={series} setSeriesField={setSeriesField} setLine={setLine} />
+      <LeagueBlock league="AL" teams={teams} seeds={seeds} setSeed={setSeed} series={series} setSeriesField={setSeriesField} setLine={setLine} autoLines={autoLines} />
+      <LeagueBlock league="NL" teams={teams} seeds={seeds} setSeed={setSeed} series={series} setSeriesField={setSeriesField} setLine={setLine} autoLines={autoLines} />
 
       <div className="pb-ws">
         <div className="pb-round-label">World Series</div>
-        <SeriesCard seriesKey="WS" title="WS" sub="AL v NL" bestOf={7} seeds={seeds} series={series} setSeriesField={setSeriesField} setLine={setLine} />
+        <SeriesCard seriesKey="WS" title="WS" sub="AL v NL" bestOf={7} seeds={seeds} series={series} setSeriesField={setSeriesField} setLine={setLine} autoLines={autoLines} />
       </div>
     </div>
   )

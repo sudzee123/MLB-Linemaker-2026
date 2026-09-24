@@ -1262,6 +1262,8 @@ button {
 .pb-check { color: var(--green); font-size: 0.75rem; }
 
 .pb-lines { display: flex; gap: 0.3rem; }
+.pb-my-wrap { flex: 1; min-width: 0; display: flex; align-items: center; gap: 0.15rem; }
+.pb-my-wrap .pb-line-input { flex: 1; }
 .pb-line-input {
   flex: 1;
   min-width: 0;
@@ -1273,6 +1275,18 @@ button {
   border-radius: 4px;
   color: var(--text);
 }
+/* Auto (model) line shown but not overridden — dimmed to signal it's a default */
+.pb-line-input.pb-auto { color: var(--text-dim); font-style: italic; }
+.pb-reset {
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: 0.7rem;
+  line-height: 1;
+  padding: 0.15rem 0.2rem;
+  border-radius: 3px;
+  transition: color 0.12s;
+}
+.pb-reset:hover { color: var(--text); }
 
 .pb-ws {
   background: var(--card-bg);
