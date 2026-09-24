@@ -437,6 +437,8 @@ class ManualGenerateIn(BaseModel):
     home_pitcher_name: str = "TBD"
     away_ml: int | None = None
     home_ml: int | None = None
+    away_team_overall: bool = False
+    home_team_overall: bool = False
     through_date: str | None = None
 
 
@@ -489,13 +491,19 @@ def manual_generate(payload: ManualGenerateIn):
     away_ab = TEAM_ID_TO_ABBREV.get(payload.away_team_id, "???")
     home_ab = TEAM_ID_TO_ABBREV.get(payload.home_team_id, "???")
 
+    # "Team (overall)" uses the "TEAM" sentinel → team ERA instead of a starter.
+    away_pid = "TEAM" if payload.away_team_overall else payload.away_pitcher_id
+    home_pid = "TEAM" if payload.home_team_overall else payload.home_pitcher_id
+    away_pname = "Team (overall)" if payload.away_team_overall else payload.away_pitcher_name
+    home_pname = "Team (overall)" if payload.home_team_overall else payload.home_pitcher_name
+
     g = {
         "away_team_id": payload.away_team_id,
         "home_team_id": payload.home_team_id,
-        "away_pitcher_id": payload.away_pitcher_id,
-        "home_pitcher_id": payload.home_pitcher_id,
-        "away_pitcher_name": payload.away_pitcher_name,
-        "home_pitcher_name": payload.home_pitcher_name,
+        "away_pitcher_id": away_pid,
+        "home_pitcher_id": home_pid,
+        "away_pitcher_name": away_pname,
+        "home_pitcher_name": home_pname,
     }
 
     league_avgs = db.load_league_avgs(through_date) or fetch_league_averages(through_date)
@@ -513,14 +521,14 @@ def manual_generate(payload: ManualGenerateIn):
             "team_id": payload.away_team_id,
             "abbrev": away_ab,
             "team_name": _ABBREV_TO_NAME.get(away_ab, away_ab),
-            "pitcher_name": payload.away_pitcher_name,
+            "pitcher_name": away_pname,
             "book_ml": payload.away_ml,
         },
         "home": {
             "team_id": payload.home_team_id,
             "abbrev": home_ab,
             "team_name": _ABBREV_TO_NAME.get(home_ab, home_ab),
-            "pitcher_name": payload.home_pitcher_name,
+            "pitcher_name": home_pname,
             "book_ml": payload.home_ml,
         },
         "windows": all_windows,

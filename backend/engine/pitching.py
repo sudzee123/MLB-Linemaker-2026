@@ -31,7 +31,7 @@ DEFAULT_IP_PER_GS = 5.0
 
 def calc_recalculated_runs_allowed(
     team_id: int,
-    starter_pitcher_id: int | None,
+    starter_pitcher_id: "int | str | None",
     through_date: str = None,
     start_date: str = None,
 ) -> dict:
@@ -40,7 +40,11 @@ def calc_recalculated_runs_allowed(
 
     Args:
         team_id: MLB team ID
-        starter_pitcher_id: MLB player ID of the probable starter (or None if TBD)
+        starter_pitcher_id: MLB player ID of the probable starter, None if TBD,
+            or the sentinel "TEAM" to use the team's overall ERA (all innings,
+            starters + relief) instead of the SP+BP blend. Used by the Manual
+            page for playoff-series projections where rotation conventions
+            don't hold.
         through_date: 'YYYY-MM-DD' cutoff for stat accumulation
 
     Returns:
@@ -51,6 +55,23 @@ def calc_recalculated_runs_allowed(
           starter_contribution, bullpen_contribution,
         }
     """
+    # ── Team-overall option: recalc_ra = team ERA (all innings) ────
+    if starter_pitcher_id == "TEAM":
+        team_pit = fetch_team_pitching(team_id, through_date, start_date)
+        era = team_pit.get("era") if team_pit else None
+        if not era:
+            era = DEFAULT_SP_ERA
+        return {
+            "sp_era": round(era, 2),
+            "sp_ip_per_gs": 0.0,
+            "sp_gs": 0,
+            "bp_era": round(era, 2),
+            "starter_contribution": 0.0,
+            "bullpen_contribution": round(era, 3),
+            "recalc_ra": round(era, 3),
+            "team_overall": True,
+        }
+
     # ── Starter stats ──────────────────────────────────────────────
     if starter_pitcher_id:
         sp_stats = fetch_pitcher_logs(starter_pitcher_id, through_date, start_date)

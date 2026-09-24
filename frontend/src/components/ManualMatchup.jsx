@@ -22,6 +22,7 @@ function TeamPicker({ label, teams, team, onTeam, pitchers, pitcher, onPitcher, 
         disabled={!team}
       >
         <option value="">{team ? 'Starter (optional)…' : 'Select team first'}</option>
+        {team && <option value="TEAM">Team (overall ERA)</option>}
         {pitchers.map(p => (
           <option key={p.id} value={p.id}>{p.name}</option>
         ))}

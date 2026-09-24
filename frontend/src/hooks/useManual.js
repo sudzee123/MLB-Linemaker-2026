@@ -53,15 +53,19 @@ export function useManual() {
     setLoading(true)
     setError(null)
     try {
+      const awayOverall = awayPitcher === 'TEAM'
+      const homeOverall = homePitcher === 'TEAM'
       const awayP = awayPitchers.find(p => String(p.id) === String(awayPitcher))
       const homeP = homePitchers.find(p => String(p.id) === String(homePitcher))
       const body = {
         away_team_id: Number(awayTeam),
         home_team_id: Number(homeTeam),
-        away_pitcher_id: awayPitcher ? Number(awayPitcher) : null,
-        home_pitcher_id: homePitcher ? Number(homePitcher) : null,
+        away_pitcher_id: (awayPitcher && !awayOverall) ? Number(awayPitcher) : null,
+        home_pitcher_id: (homePitcher && !homeOverall) ? Number(homePitcher) : null,
         away_pitcher_name: awayP?.name || 'TBD',
         home_pitcher_name: homeP?.name || 'TBD',
+        away_team_overall: awayOverall,
+        home_team_overall: homeOverall,
         away_ml: awayMl !== '' ? Number(awayMl) : null,
         home_ml: homeMl !== '' ? Number(homeMl) : null,
       }
