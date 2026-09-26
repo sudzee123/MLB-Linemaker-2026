@@ -464,17 +464,20 @@ def put_playoffs(body: BracketIn):
 
 class PlayoffLinesIn(BaseModel):
     matchups: list[dict]  # each: {key, away_id, home_id}
+    window: str = 'season'  # season | l30 | l21
 
 
 @app.post("/api/playoffs/lines")
 def playoff_lines(body: PlayoffLinesIn):
     """
-    Auto-generate season fair moneylines for playoff matchups using each
-    team's overall ERA (all innings) for both the SP and BP side of the
-    run-allowed calc. Slot 0 (higher seed) is treated as home.
+    Auto-generate fair moneylines for playoff matchups using each team's
+    overall ERA (all innings) for both the SP and BP side of the run-allowed
+    calc, over the requested stat window. Slot 0 (higher seed) is home.
     Returns {key: {away_fair_ml, home_fair_ml}}.
     """
     through_date = _yesterday()
+    window = body.window if body.window in WINDOWS else 'season'
+    wstart = _window_start(through_date, window)
     league_avgs = db.load_league_avgs(through_date) or fetch_league_averages(through_date)
     db.save_league_avgs(through_date, league_avgs)
 
@@ -486,7 +489,7 @@ def playoff_lines(body: PlayoffLinesIn):
                 "away_pitcher_id": "TEAM", "home_pitcher_id": "TEAM",
                 "away_pitcher_name": "Team (overall)", "home_pitcher_name": "Team (overall)",
             }
-            aw, hw = _run_window(g, through_date, None, league_avgs, None, None)
+            aw, hw = _run_window(g, through_date, wstart, league_avgs, None, None)
             out[m["key"]] = {"away_fair_ml": aw["fair_ml"], "home_fair_ml": hw["fair_ml"]}
         except Exception as e:
             log.warning(f"playoff_lines calc failed for {m.get('key')}: {e}")

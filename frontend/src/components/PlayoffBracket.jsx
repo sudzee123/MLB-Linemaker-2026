@@ -185,7 +185,8 @@ function LeagueBlock({ league, teams, seeds, setSeed, series, setSeriesField, se
 export default function PlayoffBracket() {
   const { teams, seeds, setSeed, series, setSeriesField, setLine, saveStatus } = usePlayoffs()
   const [autoLines, setAutoLines] = useState({})
-  const cacheRef = useRef({})  // `${away_id}-${home_id}` → { away_fair_ml, home_fair_ml }
+  const [autoWindow, setAutoWindow] = useState('season')  // season | l30 | l21
+  const cacheRef = useRef({})  // `${window}-${away_id}-${home_id}` → { away_fair_ml, home_fair_ml }
 
   const idByAbbr = useMemo(
     () => Object.fromEntries(teams.map(t => [t.abbrev, t.team_id])),
@@ -204,25 +205,26 @@ export default function PlayoffBracket() {
     return out
   }, [seeds, series, idByAbbr])
 
-  // Signature changes only when the matchup composition changes (not on line typing).
+  // Signature changes when the matchup composition OR the window changes.
   const sig = useMemo(
-    () => matchups.map(m => `${m.key}:${m.away_id}>${m.home_id}`).join('|'),
-    [matchups],
+    () => autoWindow + '|' + matchups.map(m => `${m.key}:${m.away_id}>${m.home_id}`).join('|'),
+    [matchups, autoWindow],
   )
   const matchupsRef = useRef(matchups)
   matchupsRef.current = matchups
 
   useEffect(() => {
     const mm = matchupsRef.current
-    // Apply anything already cached immediately.
+    const ck = (m) => `${autoWindow}-${m.away_id}-${m.home_id}`
+    // Rebuild from cache for the current window (drops any prior window's values).
     const applied = {}
     for (const m of mm) {
-      const c = cacheRef.current[`${m.away_id}-${m.home_id}`]
+      const c = cacheRef.current[ck(m)]
       if (c) applied[m.key] = c
     }
-    if (Object.keys(applied).length) setAutoLines(prev => ({ ...prev, ...applied }))
+    setAutoLines(applied)
 
-    const need = mm.filter(m => !cacheRef.current[`${m.away_id}-${m.home_id}`])
+    const need = mm.filter(m => !cacheRef.current[ck(m)])
     if (!need.length) return
 
     const t = setTimeout(async () => {
@@ -231,6 +233,7 @@ export default function PlayoffBracket() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            window: autoWindow,
             matchups: need.map(m => ({ key: m.key, away_id: m.away_id, home_id: m.home_id })),
           }),
         })
@@ -239,7 +242,7 @@ export default function PlayoffBracket() {
         const add = {}
         for (const m of need) {
           if (data[m.key]) {
-            cacheRef.current[`${m.away_id}-${m.home_id}`] = data[m.key]
+            cacheRef.current[ck(m)] = data[m.key]
             add[m.key] = data[m.key]
           }
         }
@@ -253,13 +256,23 @@ export default function PlayoffBracket() {
     <div className="playoff-bracket">
       <div className="pb-header">
         <p className="pb-intro">
-          Assign teams to seed slots — each matchup auto-calculates a season fair line
-          (team overall ERA for both sides). Edit any line to override; ↻ resets to auto.
-          Pick winners to advance the bracket. Everything saves automatically.
+          Assign teams to seed slots — each matchup auto-calculates a fair line
+          (team overall ERA for both sides) over the selected window. Edit any line
+          to override; ↻ resets to auto. Pick winners to advance. Saves automatically.
         </p>
         <span className={`pb-save pb-save-${saveStatus}`}>
           {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved' : ''}
         </span>
+      </div>
+
+      <div className="pb-window-toggle">
+        {[['season', 'Season'], ['l30', 'L30'], ['l21', 'L21']].map(([k, label]) => (
+          <button
+            key={k}
+            className={`pb-wt-btn${autoWindow === k ? ' pb-wt-active' : ''}`}
+            onClick={() => setAutoWindow(k)}
+          >{label}</button>
+        ))}
       </div>
 
       <LeagueBlock league="AL" teams={teams} seeds={seeds} setSeed={setSeed} series={series} setSeriesField={setSeriesField} setLine={setLine} autoLines={autoLines} />

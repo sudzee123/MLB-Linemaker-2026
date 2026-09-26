@@ -1346,3 +1346,24 @@ button {
   margin-top: 0.5rem;
   line-height: 1.4;
 }
+
+/* ── Playoff window toggle ───────────────────────────────────── */
+.pb-window-toggle { display: flex; gap: 0.4rem; margin-bottom: 0.25rem; }
+.pb-wt-btn {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.3rem 0.9rem;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.pb-wt-btn:hover { color: var(--text); }
+.pb-wt-active {
+  background: rgba(56, 189, 248, 0.12);
+  color: var(--accent);
+  border-color: rgba(56, 189, 248, 0.4);
+}
