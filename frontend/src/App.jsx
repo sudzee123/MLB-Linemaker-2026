@@ -27,6 +27,7 @@ export default function App() {
     jspMin, setJspMin, jspMax, setJspMax,
     team, setTeam,
     prevLossFilter, setPrevLossFilter,
+    playoffsOnly, setPlayoffsOnly,
     mode, setMode,
   } = useResults()
 
@@ -196,6 +197,8 @@ export default function App() {
             onTeamChange={setTeam}
             prevLossFilter={prevLossFilter}
             onPrevLossFilterChange={setPrevLossFilter}
+            playoffsOnly={playoffsOnly}
+            onPlayoffsOnlyChange={setPlayoffsOnly}
             mode={mode}
             onModeChange={setMode}
           />

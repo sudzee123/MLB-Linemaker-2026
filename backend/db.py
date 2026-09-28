@@ -89,6 +89,8 @@ def init_db():
             ("fair_ml",     "play_results",  "INTEGER"),
             ("opp_book_ml", "tracked_plays", "INTEGER"),
             ("opp_book_ml", "play_results",  "INTEGER"),
+            ("game_type",   "tracked_plays", "TEXT NOT NULL DEFAULT 'R'"),
+            ("game_type",   "play_results",  "TEXT NOT NULL DEFAULT 'R'"),
             ("conflict",    "tracked_plays", "INTEGER NOT NULL DEFAULT 0"),
         ]:
             try:
@@ -205,16 +207,16 @@ def save_result(
     game_date: str, game_id: int, team_abbrev: str, opponent_abbrev: str,
     book_ml: int, edge_pct: str, result: str, units_gained: float,
     window: str = 'season', fair_ml: int | None = None,
-    opp_book_ml: int | None = None,
+    opp_book_ml: int | None = None, game_type: str = 'R',
 ) -> int:
     with _connect() as conn:
         cur = conn.execute(
             """INSERT INTO play_results
                (game_date, game_id, team_abbrev, opponent_abbrev,
-                book_ml, edge_pct, result, units_gained, window, fair_ml, opp_book_ml)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                book_ml, edge_pct, result, units_gained, window, fair_ml, opp_book_ml, game_type)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (game_date, game_id, team_abbrev, opponent_abbrev,
-             book_ml, edge_pct, result, units_gained, window, fair_ml, opp_book_ml),
+             book_ml, edge_pct, result, units_gained, window, fair_ml, opp_book_ml, game_type),
         )
         return cur.lastrowid
 
@@ -231,6 +233,7 @@ def load_results(
     jsp_max: int | None = None,
     team: str | None = None,
     prev_loss_filter: bool = False,
+    playoffs_only: bool = False,
 ) -> list[dict]:
     if window == 'conflicts':
         conditions = ["game_id IN (SELECT DISTINCT game_id FROM tracked_plays WHERE conflict=1)"]
@@ -265,6 +268,8 @@ def load_results(
     if team:
         conditions.append("UPPER(team_abbrev) LIKE UPPER(?)")
         params.append(f'%{team}%')
+    if playoffs_only:
+        conditions.append("game_type != 'R'")
     if prev_loss_filter:
         # Include only plays where the immediately preceding series game (same
         # team vs same opponent, within 5 days, same window) was a loss with
@@ -369,16 +374,16 @@ def save_tracked_play(
     game_date: str, game_id: int, team_abbrev: str, team_name: str,
     opponent_abbrev: str, side: str, book_ml: int, book_name: str,
     edge_pct: str, window: str = 'season', fair_ml: int | None = None,
-    opp_book_ml: int | None = None,
+    opp_book_ml: int | None = None, game_type: str = 'R',
 ) -> int:
     with _connect() as conn:
         cur = conn.execute(
             """INSERT INTO tracked_plays
                (game_date, game_id, team_abbrev, team_name, opponent_abbrev,
-                side, book_ml, book_name, edge_pct, window, fair_ml, opp_book_ml)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                side, book_ml, book_name, edge_pct, window, fair_ml, opp_book_ml, game_type)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (game_date, game_id, team_abbrev, team_name, opponent_abbrev,
-             side, book_ml, book_name, edge_pct, window, fair_ml, opp_book_ml),
+             side, book_ml, book_name, edge_pct, window, fair_ml, opp_book_ml, game_type),
         )
         return cur.lastrowid
 

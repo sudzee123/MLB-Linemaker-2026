@@ -242,6 +242,7 @@ def _compute_games(game_date: str, through_date: str, odds_list: list[dict] | No
             "date": game_date,
             "game_time_ct": g["game_time_ct"],
             "game_time_utc": g["game_time_utc"],
+            "game_type": g.get("game_type", "R"),
             "num_books": og["num_books"] if og else 0,
             "ref_book": og.get("ref_book") if og else None,
             "league_home_rs_pg": league_avgs.get("home_rs_pg"),
@@ -328,7 +329,7 @@ def _auto_track(games: list[dict], game_date: str, force: bool = False):
                     game_date, game["game_id"], team_abbrev, team_name,
                     opp_abbrev, side_label, book_ml, book_name,
                     w["edge_pct"], window=wname, fair_ml=w["fair_ml"],
-                    opp_book_ml=opp_book_ml,
+                    opp_book_ml=opp_book_ml, game_type=game.get("game_type", "R"),
                 )
                 if db.is_opponent_tracked(game["game_id"], opp_abbrev):
                     db.mark_game_conflict(game["game_id"])
@@ -662,6 +663,7 @@ def add_result(payload: PlayResultIn):
         payload.game_date, payload.game_id, payload.team_abbrev,
         payload.opponent_abbrev, payload.book_ml, payload.edge_pct,
         payload.result, units, payload.window, fair_ml=payload.fair_ml,
+        game_type=payload.game_type,
     )
     return {"id": result_id, "units_gained": units}
 
@@ -679,10 +681,12 @@ def get_results_summary(
     jsp_max: int | None = Query(default=None),
     team: str | None = Query(default=None),
     prev_loss_filter: bool = Query(default=False),
+    playoffs_only: bool = Query(default=False),
     mode: str = Query(default="on", description="on = play the model side, against = fade it"),
 ):
     results = db.load_results(window, start_date, end_date, min_edge, max_edge,
-                              ml_min, ml_max, jsp_min, jsp_max, team, prev_loss_filter)
+                              ml_min, ml_max, jsp_min, jsp_max, team, prev_loss_filter,
+                              playoffs_only)
 
     # Normalize each row into a display record for the requested mode.
     # "on"  = bet the model's side at its book_ml.
@@ -701,7 +705,7 @@ def get_results_summary(
             display.append({
                 "id": r["id"], "date": r["game_date"],
                 "team": r["opponent_abbrev"], "opponent": r["team_abbrev"],
-                "window": r["window"],
+                "window": r["window"], "game_type": r["game_type"],
                 "book_ml": r["opp_book_ml"],
                 "fair_ml": None, "edge_pct": "—",
                 "result": fade_result, "units": units,
@@ -710,7 +714,7 @@ def get_results_summary(
             display.append({
                 "id": r["id"], "date": r["game_date"],
                 "team": r["team_abbrev"], "opponent": r["opponent_abbrev"],
-                "window": r["window"],
+                "window": r["window"], "game_type": r["game_type"],
                 "book_ml": r["book_ml"],
                 "fair_ml": r["fair_ml"], "edge_pct": r["edge_pct"],
                 "result": r["result"], "units": round(r["units_gained"], 3),
@@ -730,6 +734,7 @@ def get_results_summary(
         chart_data.append({
             "id": d["id"], "play_num": i, "date": d["date"],
             "team": d["team"], "opponent": d["opponent"], "window": d["window"],
+            "game_type": d["game_type"],
             "book_ml": d["book_ml"], "fair_ml": d["fair_ml"], "edge_pct": d["edge_pct"],
             "result": d["result"],
             "units": round(d["units"], 3) if d["units"] is not None else None,
@@ -883,7 +888,7 @@ def auto_settle_plays(
                 play["game_date"], play["game_id"], play["team_abbrev"],
                 play["opponent_abbrev"], play["book_ml"], play["edge_pct"],
                 result, units, play["window"], fair_ml=play.get("fair_ml"),
-                opp_book_ml=play.get("opp_book_ml"),
+                opp_book_ml=play.get("opp_book_ml"), game_type=play.get("game_type", "R"),
             )
         except Exception:
             pass  # unique constraint — already settled via another window, still mark settled
@@ -981,7 +986,7 @@ def settle_group(payload: SettleGroupIn):
             play["game_date"], play["game_id"], play["team_abbrev"],
             play["opponent_abbrev"], play["book_ml"], play["edge_pct"],
             payload.result, units, play["window"], fair_ml=play.get("fair_ml"),
-            opp_book_ml=play.get("opp_book_ml"),
+            opp_book_ml=play.get("opp_book_ml"), game_type=play.get("game_type", "R"),
         )
         result_ids.append(result_id)
 

@@ -7,6 +7,8 @@ function fmt(ml) {
   return ml > 0 ? `+${ml}` : `${ml}`
 }
 
+const ROUND_LABEL = { F: 'Wild Card', D: 'Division', L: 'Championship', W: 'World Series' }
+
 function LogButtons({ onLog }) {
   const [logged, setLogged] = useState(null)
 
@@ -125,6 +127,9 @@ export default function GameCard({ game, onLogResult, trackedSet, isPast }) {
           )}
         </div>
         <div className="game-meta">
+          {game.game_type && game.game_type !== 'R' && (
+            <span className="playoff-badge">{ROUND_LABEL[game.game_type] || 'Playoffs'}</span>
+          )}
           <span className="game-time">{game.game_time_ct}</span>
           {game.num_books > 0 && (
             <span className="books-count">{game.num_books} books</span>

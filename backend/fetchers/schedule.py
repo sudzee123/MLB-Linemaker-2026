@@ -51,7 +51,8 @@ def fetch_schedule(date_str: str) -> list[dict]:
         "sportId": 1,
         "date": date_str,
         "season": SEASON,
-        "gameType": "R",
+        # R = regular season; F/D/L/W = wild card / division / LCS / world series
+        "gameType": "R,F,D,L,W",
         "hydrate": "probablePitcher,team",
     }
 
@@ -95,6 +96,7 @@ def fetch_schedule(date_str: str) -> list[dict]:
                 "home_abbrev": TEAM_ID_TO_ABBREV.get(home_team_id, "???"),
                 "game_time_utc": game_time_utc,
                 "game_time_ct": game_time_ct,
+                "game_type": g.get("gameType", "R"),   # R regular · F/D/L/W postseason
                 "away_pitcher_id": away_pitcher.get("id"),
                 "away_pitcher_name": away_pitcher.get("fullName", "TBD"),
                 "home_pitcher_id": home_pitcher.get("id"),

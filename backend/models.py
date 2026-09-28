@@ -60,6 +60,7 @@ class PlayResultIn(BaseModel):
     result: str   # 'W' or 'L'
     window: str = 'season'
     fair_ml: int | None = None
+    game_type: str = 'R'
 
 
 class PlayResultUpdate(BaseModel):

@@ -470,8 +470,9 @@ function ResultsFilter({
   jspMin, onJspMinChange, jspMax, onJspMaxChange,
   team, onTeamChange,
   prevLossFilter, onPrevLossFilterChange,
+  playoffsOnly, onPlayoffsOnlyChange,
 }) {
-  const isFiltered = startDate || endDate || minEdge !== '' || maxEdge !== '' || mlMin !== '' || mlMax !== '' || jspMin !== '' || jspMax !== '' || team !== '' || prevLossFilter
+  const isFiltered = startDate || endDate || minEdge !== '' || maxEdge !== '' || mlMin !== '' || mlMax !== '' || jspMin !== '' || jspMax !== '' || team !== '' || prevLossFilter || playoffsOnly
 
   function clearAll() {
     onStartDateChange(''); onEndDateChange('')
@@ -479,6 +480,7 @@ function ResultsFilter({
     onJspMinChange(''); onJspMaxChange('')
     onTeamChange('')
     onPrevLossFilterChange(false)
+    onPlayoffsOnlyChange(false)
   }
 
   return (
@@ -595,7 +597,7 @@ function ResultsFilter({
         </div>
       </div>
 
-      {/* Row 4: series loss qualifier */}
+      {/* Row 4: qualifiers */}
       <div className="rf-row rf-row-divider">
         <label className="drf-toggle-label">
           <input
@@ -606,6 +608,16 @@ function ResultsFilter({
           />
           <span>Game 2+ · prev game L</span>
           <span className="drf-toggle-hint">edge ≤ 10% · ML ≥ −109 in prior game of same series</span>
+        </label>
+        <label className="drf-toggle-label">
+          <input
+            type="checkbox"
+            className="drf-toggle"
+            checked={playoffsOnly}
+            onChange={e => onPlayoffsOnlyChange(e.target.checked)}
+          />
+          <span>Playoffs only</span>
+          <span className="drf-toggle-hint">postseason games only</span>
         </label>
       </div>
     </div>
@@ -622,9 +634,10 @@ export default function ResultsTracker({
   jspMin, onJspMinChange, jspMax, onJspMaxChange,
   team, onTeamChange,
   prevLossFilter, onPrevLossFilterChange,
+  playoffsOnly, onPlayoffsOnlyChange,
   mode, onModeChange,
 }) {
-  const isFiltered = startDate || endDate || minEdge !== '' || maxEdge !== '' || mlMin !== '' || mlMax !== '' || jspMin !== '' || jspMax !== '' || team !== '' || prevLossFilter
+  const isFiltered = startDate || endDate || minEdge !== '' || maxEdge !== '' || mlMin !== '' || mlMax !== '' || jspMin !== '' || jspMax !== '' || team !== '' || prevLossFilter || playoffsOnly
 
   const filterProps = {
     startDate, endDate, onStartDateChange, onEndDateChange,
@@ -633,6 +646,7 @@ export default function ResultsTracker({
     jspMin, onJspMinChange, jspMax, onJspMaxChange,
     team, onTeamChange,
     prevLossFilter, onPrevLossFilterChange,
+    playoffsOnly, onPlayoffsOnlyChange,
   }
 
   if (window === 'conflicts') {

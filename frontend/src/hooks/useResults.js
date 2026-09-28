@@ -17,6 +17,7 @@ export function useResults() {
   const [jspMax, setJspMax] = useState('')
   const [team, setTeam] = useState('')
   const [prevLossFilter, setPrevLossFilter] = useState(false)
+  const [playoffsOnly, setPlayoffsOnly] = useState(false)
   const [mode, setMode] = useState('on') // on | against
 
   const fetchSummary = useCallback(async () => {
@@ -40,6 +41,7 @@ export function useResults() {
         if (jspMax !== '') params.set('jsp_max', jspMax)
         if (team !== '') params.set('team', team)
         if (prevLossFilter) params.set('prev_loss_filter', 'true')
+        if (playoffsOnly) params.set('playoffs_only', 'true')
         if (mode !== 'on') params.set('mode', mode)
         const res = await fetch(`${API}/results/summary?${params.toString()}`)
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -51,7 +53,7 @@ export function useResults() {
     } finally {
       setLoading(false)
     }
-  }, [window, startDate, endDate, minEdge, maxEdge, mlMin, mlMax, jspMin, jspMax, team, prevLossFilter, mode])
+  }, [window, startDate, endDate, minEdge, maxEdge, mlMin, mlMax, jspMin, jspMax, team, prevLossFilter, playoffsOnly, mode])
 
   useEffect(() => { fetchSummary() }, [fetchSummary])
 
@@ -68,6 +70,7 @@ export function useResults() {
         edge_pct: side.edge_pct,
         result,
         window: 'season',
+        game_type: game.game_type || 'R',
       }),
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -97,6 +100,7 @@ export function useResults() {
     jspMin, setJspMin, jspMax, setJspMax,
     team, setTeam,
     prevLossFilter, setPrevLossFilter,
+    playoffsOnly, setPlayoffsOnly,
     mode, setMode,
   }
 }
