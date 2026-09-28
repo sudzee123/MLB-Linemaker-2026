@@ -702,9 +702,9 @@ def _enrich_results() -> int:
     return updated
 
 
-@app.post("/api/results/enrich")
+@app.api_route("/api/results/enrich", methods=["GET", "POST"])
 def enrich_results_endpoint():
-    """Backfill side / team game # / rest days across all results."""
+    """Backfill side / team game # / rest days across all results (idempotent)."""
     return {"updated": _enrich_results()}
 
 
