@@ -89,9 +89,12 @@ def init_db():
             ("fair_ml",     "play_results",  "INTEGER"),
             ("opp_book_ml", "tracked_plays", "INTEGER"),
             ("opp_book_ml", "play_results",  "INTEGER"),
-            ("game_type",   "tracked_plays", "TEXT NOT NULL DEFAULT 'R'"),
-            ("game_type",   "play_results",  "TEXT NOT NULL DEFAULT 'R'"),
-            ("conflict",    "tracked_plays", "INTEGER NOT NULL DEFAULT 0"),
+            ("game_type",     "tracked_plays", "TEXT NOT NULL DEFAULT 'R'"),
+            ("game_type",     "play_results",  "TEXT NOT NULL DEFAULT 'R'"),
+            ("side",          "play_results",  "TEXT"),
+            ("team_game_num", "play_results",  "INTEGER"),
+            ("rest_days",     "play_results",  "INTEGER"),
+            ("conflict",      "tracked_plays", "INTEGER NOT NULL DEFAULT 0"),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
@@ -234,6 +237,12 @@ def load_results(
     team: str | None = None,
     prev_loss_filter: bool = False,
     playoffs_only: bool = False,
+    phase: str = 'all',            # all | reg | playoffs
+    side_filter: str = 'both',     # both | home | away
+    game_num_min: int | None = None,
+    game_num_max: int | None = None,
+    rest_min: int | None = None,
+    rest_max: int | None = None,
 ) -> list[dict]:
     if window == 'conflicts':
         conditions = ["game_id IN (SELECT DISTINCT game_id FROM tracked_plays WHERE conflict=1)"]
@@ -270,6 +279,25 @@ def load_results(
         params.append(f'%{team}%')
     if playoffs_only:
         conditions.append("game_type != 'R'")
+    if phase == 'reg':
+        conditions.append("game_type = 'R'")
+    elif phase == 'playoffs':
+        conditions.append("game_type != 'R'")
+    if side_filter in ('home', 'away'):
+        conditions.append("side = ?")
+        params.append(side_filter)
+    if game_num_min is not None:
+        conditions.append("team_game_num IS NOT NULL AND team_game_num >= ?")
+        params.append(game_num_min)
+    if game_num_max is not None:
+        conditions.append("team_game_num IS NOT NULL AND team_game_num <= ?")
+        params.append(game_num_max)
+    if rest_min is not None:
+        conditions.append("rest_days IS NOT NULL AND rest_days >= ?")
+        params.append(rest_min)
+    if rest_max is not None:
+        conditions.append("rest_days IS NOT NULL AND rest_days <= ?")
+        params.append(rest_max)
     if prev_loss_filter:
         # Include only plays where the immediately preceding series game (same
         # team vs same opponent, within 5 days, same window) was a loss with
@@ -318,6 +346,23 @@ def delete_result(result_id: int) -> bool:
     with _connect() as conn:
         cur = conn.execute("DELETE FROM play_results WHERE id=?", (result_id,))
         return cur.rowcount > 0
+
+
+def load_result_keys() -> list[dict]:
+    """Minimal rows (id, game_id, team_abbrev) for enrichment."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT id, game_id, team_abbrev FROM play_results"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def update_result_enrichment(result_id: int, side, team_game_num, rest_days):
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE play_results SET side=?, team_game_num=?, rest_days=? WHERE id=?",
+            (side, team_game_num, rest_days, result_id),
+        )
 
 
 def delete_window_results(window: str) -> int:

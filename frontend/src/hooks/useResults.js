@@ -17,8 +17,13 @@ export function useResults() {
   const [jspMax, setJspMax] = useState('')
   const [team, setTeam] = useState('')
   const [prevLossFilter, setPrevLossFilter] = useState(false)
-  const [playoffsOnly, setPlayoffsOnly] = useState(false)
-  const [mode, setMode] = useState('on') // on | against
+  const [phase, setPhase] = useState('all')        // all | reg | playoffs
+  const [homeAway, setHomeAway] = useState('both')  // both | home | away
+  const [gameNumMin, setGameNumMin] = useState('')
+  const [gameNumMax, setGameNumMax] = useState('')
+  const [restMin, setRestMin] = useState('')
+  const [restMax, setRestMax] = useState('')
+  const [mode, setMode] = useState('on') // on | against  (Bet Side)
 
   const fetchSummary = useCallback(async () => {
     setLoading(true)
@@ -41,7 +46,12 @@ export function useResults() {
         if (jspMax !== '') params.set('jsp_max', jspMax)
         if (team !== '') params.set('team', team)
         if (prevLossFilter) params.set('prev_loss_filter', 'true')
-        if (playoffsOnly) params.set('playoffs_only', 'true')
+        if (phase !== 'all') params.set('phase', phase)
+        if (homeAway !== 'both') params.set('side_filter', homeAway)
+        if (gameNumMin !== '') params.set('game_num_min', gameNumMin)
+        if (gameNumMax !== '') params.set('game_num_max', gameNumMax)
+        if (restMin !== '') params.set('rest_min', restMin)
+        if (restMax !== '') params.set('rest_max', restMax)
         if (mode !== 'on') params.set('mode', mode)
         const res = await fetch(`${API}/results/summary?${params.toString()}`)
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -53,7 +63,7 @@ export function useResults() {
     } finally {
       setLoading(false)
     }
-  }, [window, startDate, endDate, minEdge, maxEdge, mlMin, mlMax, jspMin, jspMax, team, prevLossFilter, playoffsOnly, mode])
+  }, [window, startDate, endDate, minEdge, maxEdge, mlMin, mlMax, jspMin, jspMax, team, prevLossFilter, phase, homeAway, gameNumMin, gameNumMax, restMin, restMax, mode])
 
   useEffect(() => { fetchSummary() }, [fetchSummary])
 
@@ -100,7 +110,10 @@ export function useResults() {
     jspMin, setJspMin, jspMax, setJspMax,
     team, setTeam,
     prevLossFilter, setPrevLossFilter,
-    playoffsOnly, setPlayoffsOnly,
+    phase, setPhase,
+    homeAway, setHomeAway,
+    gameNumMin, setGameNumMin, gameNumMax, setGameNumMax,
+    restMin, setRestMin, restMax, setRestMax,
     mode, setMode,
   }
 }

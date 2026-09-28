@@ -1386,3 +1386,39 @@ button {
   padding: 0.1rem 0.45rem;
   border-radius: 4px;
 }
+
+/* ── Results filter — left-aligned label/control rows ────────── */
+.results-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.9rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+.rf-line { display: flex; align-items: center; gap: 0.75rem; }
+.rf-lbl {
+  flex: 0 0 96px;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-dim);
+}
+.rf-ctrl { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.rf-seg { display: flex; gap: 0.35rem; }
+.rf-seg-btn {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  padding: 0.3rem 0.8rem;
+  background: #0a0e17;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.rf-seg-btn:hover { color: var(--text); }
+.rf-seg-active { color: var(--accent); border-color: rgba(56,189,248,0.5); background: rgba(56,189,248,0.1); }

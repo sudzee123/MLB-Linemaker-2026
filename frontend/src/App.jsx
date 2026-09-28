@@ -27,7 +27,10 @@ export default function App() {
     jspMin, setJspMin, jspMax, setJspMax,
     team, setTeam,
     prevLossFilter, setPrevLossFilter,
-    playoffsOnly, setPlayoffsOnly,
+    phase, setPhase,
+    homeAway, setHomeAway,
+    gameNumMin, setGameNumMin, gameNumMax, setGameNumMax,
+    restMin, setRestMin, restMax, setRestMax,
     mode, setMode,
   } = useResults()
 
@@ -197,8 +200,18 @@ export default function App() {
             onTeamChange={setTeam}
             prevLossFilter={prevLossFilter}
             onPrevLossFilterChange={setPrevLossFilter}
-            playoffsOnly={playoffsOnly}
-            onPlayoffsOnlyChange={setPlayoffsOnly}
+            phase={phase}
+            onPhaseChange={setPhase}
+            homeAway={homeAway}
+            onHomeAwayChange={setHomeAway}
+            gameNumMin={gameNumMin}
+            onGameNumMinChange={setGameNumMin}
+            gameNumMax={gameNumMax}
+            onGameNumMaxChange={setGameNumMax}
+            restMin={restMin}
+            onRestMinChange={setRestMin}
+            restMax={restMax}
+            onRestMaxChange={setRestMax}
             mode={mode}
             onModeChange={setMode}
           />

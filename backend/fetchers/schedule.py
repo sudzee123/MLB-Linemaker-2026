@@ -107,6 +107,42 @@ def fetch_schedule(date_str: str) -> list[dict]:
     return games
 
 
+def fetch_team_schedule(team_id: int) -> list[dict]:
+    """
+    A team's completed games for the season, ordered by date, each as
+    {game_id, date, is_home}. Used to derive team game number, rest days,
+    and home/away side for the Results filters.
+    """
+    url = f"{MLB_API_BASE}/schedule"
+    params = {
+        "sportId": 1,
+        "season": SEASON,
+        "teamId": team_id,
+        "gameType": "R,F,D,L,W",
+    }
+    try:
+        resp = httpx.get(url, params=params, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        log.error(f"fetch_team_schedule({team_id}) failed: {e}")
+        return []
+
+    games = []
+    for date_block in data.get("dates", []):
+        for g in date_block.get("games", []):
+            if g.get("status", {}).get("abstractGameState", "") != "Final":
+                continue
+            home_id = g["teams"]["home"]["team"]["id"]
+            games.append({
+                "game_id": g["gamePk"],
+                "date": (g.get("gameDate", "") or "")[:10],
+                "is_home": home_id == team_id,
+            })
+    games.sort(key=lambda x: (x["date"], x["game_id"]))
+    return games
+
+
 def _utc_to_ct(utc_str: str) -> str:
     """
     Convert a UTC ISO string (e.g. '2026-04-07T18:10:00Z') to a

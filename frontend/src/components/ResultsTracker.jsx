@@ -463,6 +463,32 @@ function BackfillButton({ onRefresh }) {
 }
 
 // ── Results filter ────────────────────────────────────────────────────────────
+function Seg({ value, options, onChange }) {
+  return (
+    <div className="rf-seg">
+      {options.map(([v, label]) => (
+        <button
+          key={v}
+          className={`rf-seg-btn${value === v ? ' rf-seg-active' : ''}`}
+          onClick={() => onChange(v)}
+        >{label}</button>
+      ))}
+    </div>
+  )
+}
+
+function RfRange({ min, max, onMin, onMax, step, title }) {
+  return (
+    <>
+      <input type="number" className="drf-input drf-number" value={min}
+        onChange={e => onMin(e.target.value)} placeholder="Min" step={step} title={title} />
+      <span className="drf-sep">—</span>
+      <input type="number" className="drf-input drf-number" value={max}
+        onChange={e => onMax(e.target.value)} placeholder="Max" step={step} title={title} />
+    </>
+  )
+}
+
 function ResultsFilter({
   startDate, endDate, onStartDateChange, onEndDateChange,
   minEdge, onMinEdgeChange, maxEdge, onMaxEdgeChange,
@@ -470,155 +496,129 @@ function ResultsFilter({
   jspMin, onJspMinChange, jspMax, onJspMaxChange,
   team, onTeamChange,
   prevLossFilter, onPrevLossFilterChange,
-  playoffsOnly, onPlayoffsOnlyChange,
+  phase, onPhaseChange,
+  homeAway, onHomeAwayChange,
+  gameNumMin, onGameNumMinChange, gameNumMax, onGameNumMaxChange,
+  restMin, onRestMinChange, restMax, onRestMaxChange,
+  mode, onModeChange,
 }) {
-  const isFiltered = startDate || endDate || minEdge !== '' || maxEdge !== '' || mlMin !== '' || mlMax !== '' || jspMin !== '' || jspMax !== '' || team !== '' || prevLossFilter || playoffsOnly
+  const isFiltered = startDate || endDate || minEdge !== '' || maxEdge !== '' ||
+    mlMin !== '' || mlMax !== '' || jspMin !== '' || jspMax !== '' || team !== '' ||
+    prevLossFilter || phase !== 'all' || homeAway !== 'both' || mode !== 'on' ||
+    gameNumMin !== '' || gameNumMax !== '' || restMin !== '' || restMax !== ''
 
   function clearAll() {
     onStartDateChange(''); onEndDateChange('')
     onMinEdgeChange(''); onMaxEdgeChange(''); onMlMinChange(''); onMlMaxChange('')
-    onJspMinChange(''); onJspMaxChange('')
-    onTeamChange('')
+    onJspMinChange(''); onJspMaxChange(''); onTeamChange('')
     onPrevLossFilterChange(false)
-    onPlayoffsOnlyChange(false)
+    onPhaseChange('all'); onHomeAwayChange('both'); onModeChange('on')
+    onGameNumMinChange(''); onGameNumMaxChange(''); onRestMinChange(''); onRestMaxChange('')
   }
 
   return (
     <div className="results-filter">
-      {/* Row 1: date range */}
-      <div className="rf-row">
-        <span className="drf-label">Date Range</span>
-        <button
-          className={`drf-alltime${!startDate && !endDate ? ' drf-active' : ''}`}
-          onClick={() => { onStartDateChange(''); onEndDateChange('') }}
-        >
-          All Time
-        </button>
-        <div className="drf-inputs">
+      <div className="rf-line">
+        <span className="rf-lbl">Dates</span>
+        <div className="rf-ctrl">
+          <button
+            className={`drf-alltime${!startDate && !endDate ? ' drf-active' : ''}`}
+            onClick={() => { onStartDateChange(''); onEndDateChange('') }}
+          >All Time</button>
           <input type="date" className="drf-input" value={startDate}
             onChange={e => onStartDateChange(e.target.value)} title="Start date" />
-          <span className="drf-sep">→</span>
+          <span className="drf-sep">—</span>
           <input type="date" className="drf-input" value={endDate}
             onChange={e => onEndDateChange(e.target.value)} title="End date" />
+          {isFiltered && <button className="drf-clear" onClick={clearAll}>Clear All</button>}
         </div>
       </div>
 
-      {/* Row 2: edge % + ML range */}
-      <div className="rf-row rf-row-divider">
-        <span className="drf-label">Edge %</span>
-        <div className="drf-inputs">
-          <input
-            type="number"
-            className="drf-input drf-number"
-            value={minEdge}
-            onChange={e => onMinEdgeChange(e.target.value)}
-            placeholder="Min"
-            min="0"
-            step="0.1"
-            title="Minimum edge percentage"
-          />
-          <span className="drf-sep">→</span>
-          <input
-            type="number"
-            className="drf-input drf-number"
-            value={maxEdge}
-            onChange={e => onMaxEdgeChange(e.target.value)}
-            placeholder="Max"
-            min="0"
-            step="0.1"
-            title="Maximum edge percentage"
-          />
-        </div>
-
-        <span className="drf-label rf-ml-label">ML Range</span>
-        <div className="drf-inputs">
-          <input
-            type="number"
-            className="drf-input drf-number"
-            value={mlMin}
-            onChange={e => onMlMinChange(e.target.value)}
-            placeholder="Min"
-            step="5"
-            title="Minimum moneyline (e.g. -200)"
-          />
-          <span className="drf-sep">→</span>
-          <input
-            type="number"
-            className="drf-input drf-number"
-            value={mlMax}
-            onChange={e => onMlMaxChange(e.target.value)}
-            placeholder="Max"
-            step="5"
-            title="Maximum moneyline (e.g. +300)"
-          />
-        </div>
-
-        {isFiltered && (
-          <button className="drf-clear" onClick={clearAll}>Clear All</button>
-        )}
-      </div>
-
-      {/* Row 3: JSP (projected line) range + team filter */}
-      <div className="rf-row rf-row-divider">
-        <span className="drf-label" title="Model's projected/fair moneyline">JSP Range</span>
-        <div className="drf-inputs">
-          <input
-            type="number"
-            className="drf-input drf-number"
-            value={jspMin}
-            onChange={e => onJspMinChange(e.target.value)}
-            placeholder="Min"
-            step="5"
-            title="Minimum projected line (e.g. -200)"
-          />
-          <span className="drf-sep">→</span>
-          <input
-            type="number"
-            className="drf-input drf-number"
-            value={jspMax}
-            onChange={e => onJspMaxChange(e.target.value)}
-            placeholder="Max"
-            step="5"
-            title="Maximum projected line (e.g. +150)"
-          />
-        </div>
-
-        <span className="drf-label rf-ml-label">Team</span>
-        <div className="drf-inputs">
-          <input
-            type="text"
-            className="drf-input drf-team"
-            value={team}
-            onChange={e => onTeamChange(e.target.value)}
-            placeholder="e.g. NYY"
-            maxLength={5}
-            title="Filter by team abbreviation"
-          />
+      <div className="rf-line">
+        <span className="rf-lbl">Phase</span>
+        <div className="rf-ctrl">
+          <Seg value={phase} onChange={onPhaseChange}
+            options={[['all', 'All'], ['reg', 'Reg. Season'], ['playoffs', 'Playoffs']]} />
         </div>
       </div>
 
-      {/* Row 4: qualifiers */}
-      <div className="rf-row rf-row-divider">
-        <label className="drf-toggle-label">
-          <input
-            type="checkbox"
-            className="drf-toggle"
-            checked={prevLossFilter}
-            onChange={e => onPrevLossFilterChange(e.target.checked)}
-          />
-          <span>Game 2+ · prev game L</span>
-          <span className="drf-toggle-hint">edge ≤ 10% · ML ≥ −109 in prior game of same series</span>
-        </label>
-        <label className="drf-toggle-label">
-          <input
-            type="checkbox"
-            className="drf-toggle"
-            checked={playoffsOnly}
-            onChange={e => onPlayoffsOnlyChange(e.target.checked)}
-          />
-          <span>Playoffs only</span>
-          <span className="drf-toggle-hint">postseason games only</span>
-        </label>
+      <div className="rf-line">
+        <span className="rf-lbl">Home/Away</span>
+        <div className="rf-ctrl">
+          <Seg value={homeAway} onChange={onHomeAwayChange}
+            options={[['both', 'Both'], ['home', 'Home'], ['away', 'Away']]} />
+        </div>
+      </div>
+
+      <div className="rf-line">
+        <span className="rf-lbl">Bet Side</span>
+        <div className="rf-ctrl">
+          <Seg value={mode} onChange={onModeChange}
+            options={[['on', 'On'], ['against', 'Against']]} />
+        </div>
+      </div>
+
+      <div className="rf-line">
+        <span className="rf-lbl">Team Game #</span>
+        <div className="rf-ctrl">
+          <RfRange min={gameNumMin} max={gameNumMax}
+            onMin={onGameNumMinChange} onMax={onGameNumMaxChange} step="1"
+            title="Team's game number in the season" />
+        </div>
+      </div>
+
+      <div className="rf-line">
+        <span className="rf-lbl">Rest Days</span>
+        <div className="rf-ctrl">
+          <RfRange min={restMin} max={restMax}
+            onMin={onRestMinChange} onMax={onRestMaxChange} step="1"
+            title="Days of rest before the game" />
+        </div>
+      </div>
+
+      <div className="rf-line">
+        <span className="rf-lbl">Team</span>
+        <div className="rf-ctrl">
+          <input type="text" className="drf-input drf-team" value={team}
+            onChange={e => onTeamChange(e.target.value)} placeholder="e.g. NYY"
+            maxLength={5} title="Filter by team abbreviation" />
+        </div>
+      </div>
+
+      <div className="rf-line">
+        <span className="rf-lbl">Edge %</span>
+        <div className="rf-ctrl">
+          <RfRange min={minEdge} max={maxEdge}
+            onMin={onMinEdgeChange} onMax={onMaxEdgeChange} step="0.1" title="Edge percentage" />
+        </div>
+      </div>
+
+      <div className="rf-line">
+        <span className="rf-lbl">ML</span>
+        <div className="rf-ctrl">
+          <RfRange min={mlMin} max={mlMax}
+            onMin={onMlMinChange} onMax={onMlMaxChange} step="5" title="Book moneyline" />
+        </div>
+      </div>
+
+      <div className="rf-line">
+        <span className="rf-lbl" title="Model projected/fair moneyline">JSP</span>
+        <div className="rf-ctrl">
+          <RfRange min={jspMin} max={jspMax}
+            onMin={onJspMinChange} onMax={onJspMaxChange} step="5" title="Model projected line" />
+        </div>
+      </div>
+
+      <div className="rf-line">
+        <span className="rf-lbl">Qualifier</span>
+        <div className="rf-ctrl">
+          <label className="drf-toggle-label">
+            <input type="checkbox" className="drf-toggle" checked={prevLossFilter}
+              onChange={e => onPrevLossFilterChange(e.target.checked)} />
+            <span>Game 2+ · prev game L</span>
+            <span className="drf-toggle-hint">edge ≤ 10% · ML ≥ −109 in prior game of same series</span>
+          </label>
+        </div>
       </div>
     </div>
   )
@@ -634,10 +634,13 @@ export default function ResultsTracker({
   jspMin, onJspMinChange, jspMax, onJspMaxChange,
   team, onTeamChange,
   prevLossFilter, onPrevLossFilterChange,
-  playoffsOnly, onPlayoffsOnlyChange,
+  phase, onPhaseChange,
+  homeAway, onHomeAwayChange,
+  gameNumMin, onGameNumMinChange, gameNumMax, onGameNumMaxChange,
+  restMin, onRestMinChange, restMax, onRestMaxChange,
   mode, onModeChange,
 }) {
-  const isFiltered = startDate || endDate || minEdge !== '' || maxEdge !== '' || mlMin !== '' || mlMax !== '' || jspMin !== '' || jspMax !== '' || team !== '' || prevLossFilter || playoffsOnly
+  const isFiltered = startDate || endDate || minEdge !== '' || maxEdge !== '' || mlMin !== '' || mlMax !== '' || jspMin !== '' || jspMax !== '' || team !== '' || prevLossFilter || phase !== 'all' || homeAway !== 'both' || mode !== 'on' || gameNumMin !== '' || gameNumMax !== '' || restMin !== '' || restMax !== ''
 
   const filterProps = {
     startDate, endDate, onStartDateChange, onEndDateChange,
@@ -646,7 +649,11 @@ export default function ResultsTracker({
     jspMin, onJspMinChange, jspMax, onJspMaxChange,
     team, onTeamChange,
     prevLossFilter, onPrevLossFilterChange,
-    playoffsOnly, onPlayoffsOnlyChange,
+    phase, onPhaseChange,
+    homeAway, onHomeAwayChange,
+    gameNumMin, onGameNumMinChange, gameNumMax, onGameNumMaxChange,
+    restMin, onRestMinChange, restMax, onRestMaxChange,
+    mode, onModeChange,
   }
 
   if (window === 'conflicts') {
@@ -699,7 +706,6 @@ export default function ResultsTracker({
     <div className="results-tracker">
       <div className="rt-selectors">
         <WindowSelector window={window} onChange={onWindowChange} />
-        <ModeToggle mode={mode} onChange={onModeChange} />
       </div>
       <div className="backfill-row">
         <BackfillButton onRefresh={onRefresh} />

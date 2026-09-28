@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from backend import db
 from backend.models import PlayResultIn, PlayResultUpdate, SettleGroupIn
 from backend.scheduler import setup_scheduler
-from backend.fetchers.schedule import fetch_schedule, TEAM_ID_TO_ABBREV
+from backend.fetchers.schedule import fetch_schedule, fetch_team_schedule, TEAM_ID_TO_ABBREV
 from backend.fetchers.mlb_stats import (
     fetch_team_batting,
     fetch_league_averages,
@@ -656,6 +656,58 @@ def _calc_units(book_ml: int, result: str) -> float:
     return round(book_ml / 100, 4) if book_ml > 0 else round(100 / abs(book_ml), 4)
 
 
+_ABBREV_TO_ID = {ab: tid for tid, ab in TEAM_ID_TO_ABBREV.items()}
+
+
+def _enrich_results() -> int:
+    """
+    Fill side / team_game_num / rest_days on every play_results row from each
+    team's season schedule. Idempotent — safe to re-run. Returns rows updated.
+    """
+    # Which teams actually appear in results (avoid fetching all 30 if fewer).
+    keys = db.load_result_keys()
+    abbrevs = {k["team_abbrev"] for k in keys}
+
+    team_maps: dict[str, dict] = {}
+    for ab in abbrevs:
+        tid = _ABBREV_TO_ID.get(ab)
+        if tid is None:
+            continue
+        sched = fetch_team_schedule(tid)
+        m = {}
+        prev = None
+        for i, gm in enumerate(sched):
+            rest = None
+            if prev:
+                try:
+                    rest = (datetime.strptime(gm["date"], "%Y-%m-%d")
+                            - datetime.strptime(prev, "%Y-%m-%d")).days
+                except Exception:
+                    rest = None
+            m[gm["game_id"]] = {
+                "num": i + 1,
+                "rest": rest,
+                "side": "home" if gm["is_home"] else "away",
+            }
+            prev = gm["date"]
+        team_maps[ab] = m
+
+    updated = 0
+    for k in keys:
+        info = team_maps.get(k["team_abbrev"], {}).get(k["game_id"])
+        if info:
+            db.update_result_enrichment(k["id"], info["side"], info["num"], info["rest"])
+            updated += 1
+    log.info(f"Results enrichment: updated {updated}/{len(keys)} rows")
+    return updated
+
+
+@app.post("/api/results/enrich")
+def enrich_results_endpoint():
+    """Backfill side / team game # / rest days across all results."""
+    return {"updated": _enrich_results()}
+
+
 @app.post("/api/results")
 def add_result(payload: PlayResultIn):
     units = _calc_units(payload.book_ml, payload.result)
@@ -682,11 +734,18 @@ def get_results_summary(
     team: str | None = Query(default=None),
     prev_loss_filter: bool = Query(default=False),
     playoffs_only: bool = Query(default=False),
+    phase: str = Query(default="all"),
+    side_filter: str = Query(default="both"),
+    game_num_min: int | None = Query(default=None),
+    game_num_max: int | None = Query(default=None),
+    rest_min: int | None = Query(default=None),
+    rest_max: int | None = Query(default=None),
     mode: str = Query(default="on", description="on = play the model side, against = fade it"),
 ):
     results = db.load_results(window, start_date, end_date, min_edge, max_edge,
                               ml_min, ml_max, jsp_min, jsp_max, team, prev_loss_filter,
-                              playoffs_only)
+                              playoffs_only, phase, side_filter,
+                              game_num_min, game_num_max, rest_min, rest_max)
 
     # Normalize each row into a display record for the requested mode.
     # "on"  = bet the model's side at its book_ml.
@@ -897,6 +956,13 @@ def auto_settle_plays(
         settled_count += 1
         log.info(f"Auto-settled {play['team_abbrev']} vs {play['opponent_abbrev']} "
                  f"game={play['game_id']} window={play['window']} → {result}")
+
+    # Keep side / game # / rest days current for the newly settled plays.
+    if settled_count:
+        try:
+            _enrich_results()
+        except Exception as e:
+            log.warning(f"Post-settle enrichment failed: {e}")
 
     return {
         "settled": settled_count,
