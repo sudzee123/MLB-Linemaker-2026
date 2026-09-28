@@ -34,7 +34,7 @@ from backend.fetchers.historical_odds import fetch_historical_odds
 from backend.fetchers.game_results import fetch_game_result
 from backend.engine.pitching import calc_recalculated_runs_allowed
 from backend.engine.offense import calc_offensive_strength
-from backend.engine.probability import calc_win_probability
+from backend.engine.probability import calc_win_probability, prob_to_moneyline
 from backend.engine.edge import calc_edge
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -463,8 +463,49 @@ def put_playoffs(body: BracketIn):
 
 
 class PlayoffLinesIn(BaseModel):
-    matchups: list[dict]  # each: {key, away_id, home_id}
-    window: str = 'season'  # season | l30 | l21
+    matchups: list[dict]        # each: {key, away_id, home_id[, best_of]}
+    window: str = 'season'      # season | l30 | l21 | series
+    blend_season: float = 0.5   # series only: weight on Season vs L21
+
+
+# Home/away game pattern per round, from the higher seed's (slot 0 = home) view.
+_SERIES_PATTERN = {
+    3: ['H', 'H', 'H'],                     # Wild Card: higher seed hosts all
+    5: ['H', 'H', 'A', 'A', 'H'],           # Division: 2-2-1
+    7: ['H', 'H', 'A', 'A', 'A', 'H', 'H'], # Championship / WS: 2-3-2
+}
+
+
+def _higher_seed_winprobs(hi_rs, hi_ra, lo_rs, lo_ra, league_avgs):
+    """Higher seed's single-game win prob as home and as away (equation as-is)."""
+    fh = calc_offensive_strength(away_rs_pg=lo_rs, home_rs_pg=hi_rs,
+                                 away_recalc_ra=lo_ra, home_recalc_ra=hi_ra,
+                                 league_avgs=league_avgs)
+    p_home = calc_win_probability(fh["away_exp_r"], fh["home_exp_r"])["home_win_prob"]
+    fa = calc_offensive_strength(away_rs_pg=hi_rs, home_rs_pg=lo_rs,
+                                 away_recalc_ra=hi_ra, home_recalc_ra=lo_ra,
+                                 league_avgs=league_avgs)
+    p_away = calc_win_probability(fa["away_exp_r"], fa["home_exp_r"])["away_win_prob"]
+    return p_home, p_away
+
+
+def _series_win_prob(p_home, p_away, best_of):
+    """
+    P(higher seed wins the series) given per-game home/away win probs and the
+    round's home/away pattern. Exact via convolution over all N game slots —
+    the "play all N games" equivalence holds even with position-varying probs.
+    """
+    pattern = _SERIES_PATTERN.get(best_of, _SERIES_PATTERN[7])
+    k = best_of // 2 + 1
+    probs = [p_home if slot == "H" else p_away for slot in pattern]
+    dp = [1.0]
+    for p in probs:
+        ndp = [0.0] * (len(dp) + 1)
+        for j, val in enumerate(dp):
+            ndp[j] += val * (1 - p)
+            ndp[j + 1] += val * p
+        dp = ndp
+    return sum(dp[k:])
 
 
 @app.post("/api/playoffs/lines")
@@ -472,16 +513,53 @@ def playoff_lines(body: PlayoffLinesIn):
     """
     Auto-generate fair moneylines for playoff matchups using each team's
     overall ERA (all innings) for both the SP and BP side of the run-allowed
-    calc, over the requested stat window. Slot 0 (higher seed) is home.
+    calc. Slot 0 (higher seed) is home. Equation used exactly as-is.
+
+    window in {season,l30,l21}: single-game line for that window.
+    window == 'series': blend Season + L21 (weight = blend_season), then apply
+    the round's best-of-N binomial with the real home/away game split.
     Returns {key: {away_fair_ml, home_fair_ml}}.
     """
     through_date = _yesterday()
-    window = body.window if body.window in WINDOWS else 'season'
-    wstart = _window_start(through_date, window)
     league_avgs = db.load_league_avgs(through_date) or fetch_league_averages(through_date)
     db.save_league_avgs(through_date, league_avgs)
 
     out: dict[str, dict] = {}
+
+    if body.window == "series":
+        w = min(max(body.blend_season, 0.0), 1.0)
+        l21_start = _window_start(through_date, "l21")
+
+        def _stats(tid, wstart):
+            bat = fetch_team_batting(tid, through_date, wstart)
+            pit = calc_recalculated_runs_allowed(tid, "TEAM", through_date, wstart)
+            return bat.get("rs_pg", 0), pit["recalc_ra"]
+
+        for m in body.matchups:
+            try:
+                hi, lo = m["home_id"], m["away_id"]  # home slot = higher seed
+                hi_rs_s, hi_ra_s = _stats(hi, None)
+                lo_rs_s, lo_ra_s = _stats(lo, None)
+                hi_rs_l, hi_ra_l = _stats(hi, l21_start)
+                lo_rs_l, lo_ra_l = _stats(lo, l21_start)
+
+                ph_s, pa_s = _higher_seed_winprobs(hi_rs_s, hi_ra_s, lo_rs_s, lo_ra_s, league_avgs)
+                ph_l, pa_l = _higher_seed_winprobs(hi_rs_l, hi_ra_l, lo_rs_l, lo_ra_l, league_avgs)
+                p_home = w * ph_s + (1 - w) * ph_l
+                p_away = w * pa_s + (1 - w) * pa_l
+
+                series_hi = _series_win_prob(p_home, p_away, m.get("best_of", 7))
+                out[m["key"]] = {
+                    "home_fair_ml": prob_to_moneyline(series_hi),
+                    "away_fair_ml": prob_to_moneyline(1 - series_hi),
+                }
+            except Exception as e:
+                log.warning(f"playoff_lines series calc failed for {m.get('key')}: {e}")
+        return out
+
+    # Single-game window mode
+    window = body.window if body.window in WINDOWS else 'season'
+    wstart = _window_start(through_date, window)
     for m in body.matchups:
         try:
             g = {

@@ -7,6 +7,9 @@ const ALL_SERIES_KEYS = [
   'WS',
 ]
 
+// Best-of length per round (Wild Card 3, Division 5, Championship/WS 7).
+const bestOfForKey = (k) => (k.includes('WC') ? 3 : k.includes('DS') ? 5 : 7)
+
 // ── Bracket derivation ────────────────────────────────────────────────────────
 // Matchups follow the 12-team format. Teams for later rounds are derived from
 // seeds + validated winner picks, so changing an upstream pick reflows downstream.
@@ -185,8 +188,12 @@ function LeagueBlock({ league, teams, seeds, setSeed, series, setSeriesField, se
 export default function PlayoffBracket() {
   const { teams, seeds, setSeed, series, setSeriesField, setLine, saveStatus } = usePlayoffs()
   const [autoLines, setAutoLines] = useState({})
-  const [autoWindow, setAutoWindow] = useState('season')  // season | l30 | l21
-  const cacheRef = useRef({})  // `${window}-${away_id}-${home_id}` → { away_fair_ml, home_fair_ml }
+  const [autoWindow, setAutoWindow] = useState('season')  // season | l30 | l21 | series
+  const [blendSeason, setBlendSeason] = useState(0.5)      // series only
+  const cacheRef = useRef({})  // `${modeKey}-${away_id}-${home_id}` → { away_fair_ml, home_fair_ml }
+
+  // Distinguishes cache entries; series also varies by blend weight.
+  const modeKey = autoWindow === 'series' ? `series:${blendSeason}` : autoWindow
 
   const idByAbbr = useMemo(
     () => Object.fromEntries(teams.map(t => [t.abbrev, t.team_id])),
@@ -199,24 +206,24 @@ export default function PlayoffBracket() {
     for (const key of ALL_SERIES_KEYS) {
       const [home, away] = teamsForSeries(key, seeds, series)
       if (home && away && idByAbbr[home] != null && idByAbbr[away] != null) {
-        out.push({ key, home, away, home_id: idByAbbr[home], away_id: idByAbbr[away] })
+        out.push({ key, home, away, home_id: idByAbbr[home], away_id: idByAbbr[away], best_of: bestOfForKey(key) })
       }
     }
     return out
   }, [seeds, series, idByAbbr])
 
-  // Signature changes when the matchup composition OR the window changes.
+  // Signature changes when the matchup composition OR the mode (window/blend) changes.
   const sig = useMemo(
-    () => autoWindow + '|' + matchups.map(m => `${m.key}:${m.away_id}>${m.home_id}`).join('|'),
-    [matchups, autoWindow],
+    () => modeKey + '|' + matchups.map(m => `${m.key}:${m.away_id}>${m.home_id}`).join('|'),
+    [matchups, modeKey],
   )
   const matchupsRef = useRef(matchups)
   matchupsRef.current = matchups
 
   useEffect(() => {
     const mm = matchupsRef.current
-    const ck = (m) => `${autoWindow}-${m.away_id}-${m.home_id}`
-    // Rebuild from cache for the current window (drops any prior window's values).
+    const ck = (m) => `${modeKey}-${m.away_id}-${m.home_id}`
+    // Rebuild from cache for the current mode (drops any prior mode's values).
     const applied = {}
     for (const m of mm) {
       const c = cacheRef.current[ck(m)]
@@ -234,7 +241,8 @@ export default function PlayoffBracket() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             window: autoWindow,
-            matchups: need.map(m => ({ key: m.key, away_id: m.away_id, home_id: m.home_id })),
+            blend_season: blendSeason,
+            matchups: need.map(m => ({ key: m.key, away_id: m.away_id, home_id: m.home_id, best_of: m.best_of })),
           }),
         })
         if (!res.ok) return
@@ -266,7 +274,7 @@ export default function PlayoffBracket() {
       </div>
 
       <div className="pb-window-toggle">
-        {[['season', 'Season'], ['l30', 'L30'], ['l21', 'L21']].map(([k, label]) => (
+        {[['season', 'Season'], ['l30', 'L30'], ['l21', 'L21'], ['series', 'Series']].map(([k, label]) => (
           <button
             key={k}
             className={`pb-wt-btn${autoWindow === k ? ' pb-wt-active' : ''}`}
@@ -274,6 +282,21 @@ export default function PlayoffBracket() {
           >{label}</button>
         ))}
       </div>
+
+      {autoWindow === 'series' && (
+        <div className="pb-blend-row">
+          <span className="pb-blend-label">Series price · Season/L21 blend + best-of-N (home split)</span>
+          <div className="pb-blend-toggle">
+            {[[0.7, 'Lean Season'], [0.5, '50/50'], [0.3, 'Lean L21']].map(([v, label]) => (
+              <button
+                key={v}
+                className={`pb-wt-btn${blendSeason === v ? ' pb-wt-active' : ''}`}
+                onClick={() => setBlendSeason(v)}
+              >{label}</button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <LeagueBlock league="AL" teams={teams} seeds={seeds} setSeed={setSeed} series={series} setSeriesField={setSeriesField} setLine={setLine} autoLines={autoLines} />
       <LeagueBlock league="NL" teams={teams} seeds={seeds} setSeed={setSeed} series={series} setSeriesField={setSeriesField} setLine={setLine} autoLines={autoLines} />

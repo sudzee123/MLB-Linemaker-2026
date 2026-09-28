@@ -1367,3 +1367,8 @@ button {
   color: var(--accent);
   border-color: rgba(56, 189, 248, 0.4);
 }
+
+/* ── Playoff series blend row ────────────────────────────────── */
+.pb-blend-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.25rem; }
+.pb-blend-label { font-family: var(--mono); font-size: 0.68rem; color: var(--text-dim); }
+.pb-blend-toggle { display: flex; gap: 0.4rem; }
