@@ -804,6 +804,7 @@ export default function ResultsTracker({
   }
 
   const [chartMode, setChartMode] = useState('game')
+  const [showHistory, setShowHistory] = useState(false)
 
   const netPos = summary.net_units >= 0
   const roiPos = summary.roi_pct >= 0
@@ -870,16 +871,24 @@ export default function ResultsTracker({
       </div>
       <UnitChart rawData={chartData} mode={chartMode} />
 
-      {/* History */}
-      <HistoryTable chartData={summary.chart_data} onUpdate={onUpdate} onDelete={onDelete} />
-
-      {/* Closing Line Value — same filters + window as the results above */}
+      {/* Closing Line Value — directly below results, same filters + window */}
       {clvSummary && clvSummary.count > 0 && (
         <div className="clv-section">
           <div className="clv-section-title">Closing Line Value</div>
           <ClvView clv={clvSummary} />
         </div>
       )}
+
+      {/* Individual results — collapsed by default, available on demand */}
+      <div className="history-collapse">
+        <button className="history-toggle" onClick={() => setShowHistory(v => !v)}>
+          <span className="ht-caret">{showHistory ? '▾' : '▸'}</span>
+          Individual Results ({summary.total_plays})
+        </button>
+        {showHistory && (
+          <HistoryTable chartData={summary.chart_data} onUpdate={onUpdate} onDelete={onDelete} />
+        )}
+      </div>
     </div>
   )
 }
