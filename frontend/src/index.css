@@ -1277,6 +1277,22 @@ button {
 }
 /* Auto (model) line shown but not overridden — dimmed to signal it's a default */
 .pb-line-input.pb-auto { color: var(--text-dim); font-style: italic; }
+/* Manual series record (Series mode only) */
+.pb-record { display: flex; align-items: center; gap: 0.3rem; margin-bottom: 0.35rem; }
+.pb-record-lbl { font-family: var(--mono); font-size: 0.58rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; margin-right: 0.1rem; }
+.pb-record-dash { color: var(--text-dim); font-size: 0.7rem; }
+.pb-record-input {
+  width: 2.1rem;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  text-align: center;
+  padding: 0.2rem 0.15rem;
+  background: #0a0e17;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+}
+.pb-record-input:disabled { opacity: 0.4; }
 .pb-reset {
   flex-shrink: 0;
   color: var(--accent);

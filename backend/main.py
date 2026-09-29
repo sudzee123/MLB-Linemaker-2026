@@ -514,15 +514,25 @@ def _higher_seed_winprobs(hi_rs, hi_ra, lo_rs, lo_ra, league_avgs):
     return p_home, p_away
 
 
-def _series_win_prob(p_home, p_away, best_of):
+def _series_win_prob(p_home, p_away, best_of, hi_wins=0, lo_wins=0):
     """
-    P(higher seed wins the series) given per-game home/away win probs and the
-    round's home/away pattern. Exact via convolution over all N game slots —
-    the "play all N games" equivalence holds even with position-varying probs.
+    P(higher seed wins the series) given per-game home/away win probs, the
+    round's home/away pattern, and the CURRENT series record (hi_wins/lo_wins).
+    Convolves only over the games still to be played (the fixed venue pattern
+    is consumed in order), then sums the mass where the higher seed reaches the
+    remaining wins it needs. The "play all remaining games" equivalence holds
+    even with position-varying probs. Clinched series short-circuit to 1/0.
     """
     pattern = _SERIES_PATTERN.get(best_of, _SERIES_PATTERN[7])
     k = best_of // 2 + 1
-    probs = [p_home if slot == "H" else p_away for slot in pattern]
+    if hi_wins >= k:
+        return 1.0
+    if lo_wins >= k:
+        return 0.0
+    games_played = hi_wins + lo_wins
+    remaining = pattern[games_played:]      # venue slots still to come
+    need = k - hi_wins                       # more wins the higher seed needs
+    probs = [p_home if slot == "H" else p_away for slot in remaining]
     dp = [1.0]
     for p in probs:
         ndp = [0.0] * (len(dp) + 1)
@@ -530,7 +540,7 @@ def _series_win_prob(p_home, p_away, best_of):
             ndp[j] += val * (1 - p)
             ndp[j + 1] += val * p
         dp = ndp
-    return sum(dp[k:])
+    return sum(dp[need:])
 
 
 @app.post("/api/playoffs/lines")
@@ -573,7 +583,12 @@ def playoff_lines(body: PlayoffLinesIn):
                 p_home = w * ph_s + (1 - w) * ph_l
                 p_away = w * pa_s + (1 - w) * pa_l
 
-                series_hi = _series_win_prob(p_home, p_away, m.get("best_of", 7))
+                # home slot = higher seed → home_wins/away_wins map to hi/lo.
+                series_hi = _series_win_prob(
+                    p_home, p_away, m.get("best_of", 7),
+                    hi_wins=int(m.get("home_wins", 0) or 0),
+                    lo_wins=int(m.get("away_wins", 0) or 0),
+                )
                 out[m["key"]] = {
                     "home_fair_ml": prob_to_moneyline(series_hi),
                     "away_fair_ml": prob_to_moneyline(1 - series_hi),

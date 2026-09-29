@@ -45,15 +45,23 @@ const SEED_LABELS = {
 
 // ── Series card ───────────────────────────────────────────────────────────────
 
-function SeriesCard({ seriesKey, title, sub, bestOf, seeds, series, setSeriesField, setLine, autoLines }) {
+function SeriesCard({ seriesKey, title, sub, bestOf, seeds, series, setSeriesField, setLine, autoLines, showRecord }) {
   const [a, b] = teamsForSeries(seriesKey, seeds, series)
   const pick = validPick(seriesKey, seeds, series)
   const lines = series[seriesKey]?.lines || {}
   const auto = autoLines[seriesKey]  // { away_fair_ml, home_fair_ml } — slot 0 = home
+  const record = series[seriesKey]?.record || {}
+  const clinch = Math.floor(bestOf / 2) + 1   // wins needed to take the series
 
   const choose = (team) => {
     if (!team) return
     setSeriesField(seriesKey, 'pick', pick === team ? '' : team)
+  }
+
+  // slot 0 (a) = higher seed = home_wins; slot 1 (b) = lower seed = away_wins.
+  const setWins = (which, val) => {
+    const n = Math.max(0, Math.min(clinch, parseInt(val, 10) || 0))
+    setSeriesField(seriesKey, 'record', { ...record, [which]: n })
   }
 
   // Rendered inline (not as a nested component) so the inputs keep focus
@@ -114,6 +122,18 @@ function SeriesCard({ seriesKey, title, sub, bestOf, seeds, series, setSeriesFie
         <span className="pb-series-title">{title}</span>
         <span className="pb-series-sub">{sub} · Bo{bestOf}</span>
       </div>
+      {showRecord && (
+        <div className="pb-record" title="Current series record — feeds the live series price">
+          <span className="pb-record-lbl">Games</span>
+          <input className="pb-record-input" type="number" min="0" max={clinch}
+            value={record.home_wins ?? 0} onChange={e => setWins('home_wins', e.target.value)}
+            title={`${a || 'Higher seed'} wins`} disabled={!a} />
+          <span className="pb-record-dash">–</span>
+          <input className="pb-record-input" type="number" min="0" max={clinch}
+            value={record.away_wins ?? 0} onChange={e => setWins('away_wins', e.target.value)}
+            title={`${b || 'Lower seed'} wins`} disabled={!b} />
+        </div>
+      )}
       {teamBlock(a, 0)}
       {teamBlock(b, 1)}
     </div>
@@ -157,8 +177,8 @@ function SeedRow({ league, teams, seeds, setSeed }) {
 
 // ── League block ──────────────────────────────────────────────────────────────
 
-function LeagueBlock({ league, teams, seeds, setSeed, series, setSeriesField, setLine, autoLines }) {
-  const common = { seeds, series, setSeriesField, setLine, autoLines }
+function LeagueBlock({ league, teams, seeds, setSeed, series, setSeriesField, setLine, autoLines, showRecord }) {
+  const common = { seeds, series, setSeriesField, setLine, autoLines, showRecord }
   return (
     <div className="pb-league">
       <div className="pb-league-label">{league === 'AL' ? 'American League' : 'National League'}</div>
@@ -206,23 +226,33 @@ export default function PlayoffBracket() {
     for (const key of ALL_SERIES_KEYS) {
       const [home, away] = teamsForSeries(key, seeds, series)
       if (home && away && idByAbbr[home] != null && idByAbbr[away] != null) {
-        out.push({ key, home, away, home_id: idByAbbr[home], away_id: idByAbbr[away], best_of: bestOfForKey(key) })
+        const rec = series[key]?.record || {}
+        out.push({
+          key, home, away, home_id: idByAbbr[home], away_id: idByAbbr[away],
+          best_of: bestOfForKey(key),
+          home_wins: Number(rec.home_wins) || 0, away_wins: Number(rec.away_wins) || 0,
+        })
       }
     }
     return out
   }, [seeds, series, idByAbbr])
 
   // Signature changes when the matchup composition OR the mode (window/blend) changes.
+  // Series price also depends on the current record; single-game modes don't.
+  const isSeries = modeKey.startsWith('series')
   const sig = useMemo(
-    () => modeKey + '|' + matchups.map(m => `${m.key}:${m.away_id}>${m.home_id}`).join('|'),
-    [matchups, modeKey],
+    () => modeKey + '|' + matchups.map(m =>
+      `${m.key}:${m.away_id}>${m.home_id}${isSeries ? `@${m.home_wins}-${m.away_wins}` : ''}`
+    ).join('|'),
+    [matchups, modeKey, isSeries],
   )
   const matchupsRef = useRef(matchups)
   matchupsRef.current = matchups
 
   useEffect(() => {
     const mm = matchupsRef.current
-    const ck = (m) => `${modeKey}-${m.away_id}-${m.home_id}`
+    const ck = (m) => `${modeKey}-${m.away_id}-${m.home_id}` +
+      (isSeries ? `-${m.home_wins}-${m.away_wins}` : '')
     // Rebuild from cache for the current mode (drops any prior mode's values).
     const applied = {}
     for (const m of mm) {
@@ -242,7 +272,10 @@ export default function PlayoffBracket() {
           body: JSON.stringify({
             window: autoWindow,
             blend_season: blendSeason,
-            matchups: need.map(m => ({ key: m.key, away_id: m.away_id, home_id: m.home_id, best_of: m.best_of })),
+            matchups: need.map(m => ({
+              key: m.key, away_id: m.away_id, home_id: m.home_id, best_of: m.best_of,
+              home_wins: m.home_wins, away_wins: m.away_wins,
+            })),
           }),
         })
         if (!res.ok) return
@@ -298,12 +331,12 @@ export default function PlayoffBracket() {
         </div>
       )}
 
-      <LeagueBlock league="AL" teams={teams} seeds={seeds} setSeed={setSeed} series={series} setSeriesField={setSeriesField} setLine={setLine} autoLines={autoLines} />
-      <LeagueBlock league="NL" teams={teams} seeds={seeds} setSeed={setSeed} series={series} setSeriesField={setSeriesField} setLine={setLine} autoLines={autoLines} />
+      <LeagueBlock league="AL" teams={teams} seeds={seeds} setSeed={setSeed} series={series} setSeriesField={setSeriesField} setLine={setLine} autoLines={autoLines} showRecord={isSeries} />
+      <LeagueBlock league="NL" teams={teams} seeds={seeds} setSeed={setSeed} series={series} setSeriesField={setSeriesField} setLine={setLine} autoLines={autoLines} showRecord={isSeries} />
 
       <div className="pb-ws">
         <div className="pb-round-label">World Series</div>
-        <SeriesCard seriesKey="WS" title="WS" sub="AL v NL" bestOf={7} seeds={seeds} series={series} setSeriesField={setSeriesField} setLine={setLine} autoLines={autoLines} />
+        <SeriesCard seriesKey="WS" title="WS" sub="AL v NL" bestOf={7} seeds={seeds} series={series} setSeriesField={setSeriesField} setLine={setLine} autoLines={autoLines} showRecord={isSeries} />
       </div>
     </div>
   )
