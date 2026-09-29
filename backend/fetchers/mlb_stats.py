@@ -14,6 +14,31 @@ from backend.config import MLB_API_BASE, SEASON
 
 log = logging.getLogger(__name__)
 
+# Game-type passes used to build a team/pitcher stat line. `None` = the API
+# default (regular season, R); "P" = postseason. Requesting both and combining
+# is the only way the MLB API returns reg-season + playoff games together — a
+# combined "R,F,D,L,W" list silently drops the postseason codes.
+_STAT_GAME_TYPES = (None, "P")
+
+
+def _fetch_splits(url: str, base_params: dict) -> list[dict]:
+    """Fetch stat splits across regular season + postseason, concatenated."""
+    out = []
+    for gt in _STAT_GAME_TYPES:
+        params = dict(base_params)
+        if gt:
+            params["gameType"] = gt
+        try:
+            resp = httpx.get(url, params=params, timeout=15)
+            # Before the playoffs exist, the postseason endpoint 404s — expected, not an error.
+            if gt == "P" and resp.status_code == 404:
+                continue
+            resp.raise_for_status()
+            out += resp.json().get("stats", [{}])[0].get("splits", [])
+        except Exception as e:
+            log.error(f"stat fetch failed ({url} gameType={gt}): {e}")
+    return out
+
 
 # ─── Team Batting ────────────────────────────────────────────────────────────
 
@@ -26,38 +51,23 @@ def fetch_team_batting(team_id: int, through_date: str = None, start_date: str =
         return _team_batting_via_game_log(team_id, through_date, start_date)
 
     url = f"{MLB_API_BASE}/teams/{team_id}/stats"
-    params = {"stats": "season", "group": "hitting", "season": SEASON}
-    try:
-        resp = httpx.get(url, params=params, timeout=15)
-        resp.raise_for_status()
-        splits = resp.json().get("stats", [{}])[0].get("splits", [])
-        if not splits:
-            log.warning(f"No batting splits for team {team_id}")
-            return {}
-        stat = splits[0]["stat"]
-        games = stat.get("gamesPlayed", 0)
-        runs = stat.get("runs", 0)
-        return {
-            "games": games,
-            "runs": runs,
-            "rs_pg": round(runs / games, 3) if games else 0.0,
-        }
-    except Exception as e:
-        log.error(f"fetch_team_batting({team_id}) failed: {e}")
+    splits = _fetch_splits(url, {"stats": "season", "group": "hitting", "season": SEASON})
+    if not splits:
+        log.warning(f"No batting splits for team {team_id}")
         return {}
+    games = sum(s["stat"].get("gamesPlayed", 0) for s in splits)
+    runs = sum(s["stat"].get("runs", 0) for s in splits)
+    return {
+        "games": games,
+        "runs": runs,
+        "rs_pg": round(runs / games, 3) if games else 0.0,
+    }
 
 
 def _team_batting_via_game_log(team_id: int, through_date: str, start_date: str = None) -> dict:
     """Aggregate game-by-game batting log within an optional date window."""
     url = f"{MLB_API_BASE}/teams/{team_id}/stats"
-    params = {"stats": "gameLog", "group": "hitting", "season": SEASON}
-    try:
-        resp = httpx.get(url, params=params, timeout=15)
-        resp.raise_for_status()
-        splits = resp.json().get("stats", [{}])[0].get("splits", [])
-    except Exception as e:
-        log.error(f"_team_batting_via_game_log({team_id}) failed: {e}")
-        return {}
+    splits = _fetch_splits(url, {"stats": "gameLog", "group": "hitting", "season": SEASON})
 
     total_runs, total_games = 0, 0
     for split in splits:
@@ -84,15 +94,7 @@ def fetch_pitcher_logs(pitcher_id: int, through_date: str = None, start_date: st
     Filters to starts only (or relief if no starts exist).
     """
     url = f"{MLB_API_BASE}/people/{pitcher_id}/stats"
-    params = {"stats": "gameLog", "group": "pitching", "season": SEASON}
-    try:
-        resp = httpx.get(url, params=params, timeout=15)
-        resp.raise_for_status()
-        stats_list = resp.json().get("stats", [])
-        splits = stats_list[0].get("splits", []) if stats_list else []
-    except Exception as e:
-        log.error(f"fetch_pitcher_logs({pitcher_id}) failed: {e}")
-        return {}
+    splits = _fetch_splits(url, {"stats": "gameLog", "group": "pitching", "season": SEASON})
 
     total_gs, total_gs_ip_outs, total_gs_er = 0, 0, 0
     total_g, total_rel_ip_outs, total_rel_er = 0, 0, 0
@@ -156,34 +158,19 @@ def fetch_team_pitching(team_id: int, through_date: str = None, start_date: str 
         return _team_pitching_via_game_log(team_id, through_date, start_date)
 
     url = f"{MLB_API_BASE}/teams/{team_id}/stats"
-    params = {"stats": "season", "group": "pitching", "season": SEASON}
-    try:
-        resp = httpx.get(url, params=params, timeout=15)
-        resp.raise_for_status()
-        splits = resp.json().get("stats", [{}])[0].get("splits", [])
-        if not splits:
-            return {}
-        stat = splits[0]["stat"]
-        ip_outs = _ip_str_to_outs(str(stat.get("inningsPitched", "0")))
-        ip = ip_outs / 3
-        er = stat.get("earnedRuns", 0)
-        era = round((er / ip) * 9, 2) if ip else 0.0
-        return {"ip": round(ip, 2), "er": er, "era": era}
-    except Exception as e:
-        log.error(f"fetch_team_pitching({team_id}) failed: {e}")
+    splits = _fetch_splits(url, {"stats": "season", "group": "pitching", "season": SEASON})
+    if not splits:
         return {}
+    ip_outs = sum(_ip_str_to_outs(str(s["stat"].get("inningsPitched", "0"))) for s in splits)
+    ip = ip_outs / 3
+    er = sum(s["stat"].get("earnedRuns", 0) for s in splits)
+    era = round((er / ip) * 9, 2) if ip else 0.0
+    return {"ip": round(ip, 2), "er": er, "era": era}
 
 
 def _team_pitching_via_game_log(team_id: int, through_date: str, start_date: str = None) -> dict:
     url = f"{MLB_API_BASE}/teams/{team_id}/stats"
-    params = {"stats": "gameLog", "group": "pitching", "season": SEASON}
-    try:
-        resp = httpx.get(url, params=params, timeout=15)
-        resp.raise_for_status()
-        splits = resp.json().get("stats", [{}])[0].get("splits", [])
-    except Exception as e:
-        log.error(f"_team_pitching_via_game_log({team_id}) failed: {e}")
-        return {}
+    splits = _fetch_splits(url, {"stats": "gameLog", "group": "pitching", "season": SEASON})
 
     total_ip_outs, total_er = 0, 0
     for split in splits:
