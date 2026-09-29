@@ -10,3 +10,6 @@ MLB_API_BASE = "https://statsapi.mlb.com/api/v1"
 
 SEASON = 2026
 TIMEZONE = "America/Chicago"
+
+# CLV (closing line value) capture toggle
+CLV_ENABLED = os.getenv("CLV_ENABLED", "1") not in ("0", "false", "False", "")

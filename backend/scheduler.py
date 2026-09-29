@@ -64,6 +64,25 @@ def setup_scheduler(analyze_fn) -> AsyncIOScheduler:
         replace_existing=True,
     )
 
+    # CLV live capture — fill closing prices for pending plays near first pitch
+    try:
+        from backend.config import CLV_ENABLED
+        if CLV_ENABLED:
+            from backend.clv import capture as clv_capture
+            from apscheduler.triggers.interval import IntervalTrigger
+
+            async def clv_tick():
+                try:
+                    clv_capture.capture_tick()
+                except Exception as e:
+                    log.warning(f"[Scheduler] CLV tick failed: {e}")
+
+            scheduler.add_job(clv_tick, IntervalTrigger(minutes=5),
+                              id="clv_capture", replace_existing=True)
+            log.info("Scheduler: CLV capture every 5 min")
+    except Exception as e:
+        log.warning(f"CLV scheduler setup skipped: {e}")
+
     scheduler.start()
     log.info("Scheduler started — daily 6 AM CT, odds hourly")
     return scheduler

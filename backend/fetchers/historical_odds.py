@@ -21,12 +21,15 @@ CENTRAL = ZoneInfo("America/Chicago")
 REF_PRIORITY = ["pinnacle", "draftkings", "fanduel", "betmgm", "williamhill_us"]
 
 
-def fetch_historical_odds(snapshot_timestamp: str) -> list[dict]:
+def fetch_historical_odds(snapshot_timestamp: str, regions: str = "us") -> list[dict]:
     """
     Pull a historical MLB h2h moneyline snapshot from The Odds API.
 
     Args:
         snapshot_timestamp: ISO 8601 UTC string, e.g. "2026-07-09T02:00:00Z"
+        regions: comma-separated Odds API regions. "us" (10 credits/call) for
+                 the daily backfill; "us,us2" (20 credits/call) for CLV, to
+                 match the NHL best-line-across-books closing definition.
 
     Returns:
         List of game dicts matching the schema of live fetch_odds:
@@ -43,7 +46,7 @@ def fetch_historical_odds(snapshot_timestamp: str) -> list[dict]:
     url = f"{ODDS_API_BASE}/historical/sports/baseball_mlb/odds/"
     params = {
         "apiKey": ODDS_API_KEY,
-        "regions": "us",
+        "regions": regions,
         "markets": "h2h",
         "oddsFormat": "american",
         "date": snapshot_timestamp,

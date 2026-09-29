@@ -5,6 +5,7 @@ const API = '/api'
 export function useResults() {
   const [summary, setSummary] = useState(null)
   const [conflictBreakdown, setConflictBreakdown] = useState(null)
+  const [clvSummary, setClvSummary] = useState(null)
   const [loading, setLoading] = useState(true)
   const [window, setWindow] = useState('season')
   const [startDate, setStartDate] = useState('')
@@ -32,6 +33,21 @@ export function useResults() {
         const res = await fetch(`${API}/results/conflict-breakdown`)
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         setConflictBreakdown(await res.json())
+        setSummary(null)
+      } else if (window === 'clv') {
+        const p = new URLSearchParams()
+        if (startDate) p.set('start_date', startDate)
+        if (endDate) p.set('end_date', endDate)
+        if (minEdge !== '') p.set('min_edge', minEdge)
+        if (maxEdge !== '') p.set('max_edge', maxEdge)
+        if (mlMin !== '') p.set('ml_min', mlMin)
+        if (mlMax !== '') p.set('ml_max', mlMax)
+        if (team !== '') p.set('team', team)
+        if (phase !== 'all') p.set('phase', phase)
+        if (homeAway !== 'both') p.set('side_filter', homeAway)
+        const res = await fetch(`${API}/clv/summary?${p.toString()}`)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        setClvSummary(await res.json())
         setSummary(null)
       } else {
         const params = new URLSearchParams()
@@ -103,7 +119,7 @@ export function useResults() {
   }, [fetchSummary])
 
   return {
-    summary, conflictBreakdown, loading, logResult, updateResult, deleteResult, refresh: fetchSummary,
+    summary, conflictBreakdown, clvSummary, loading, logResult, updateResult, deleteResult, refresh: fetchSummary,
     window, setWindow,
     startDate, setStartDate, endDate, setEndDate,
     minEdge, setMinEdge, maxEdge, setMaxEdge, mlMin, setMlMin, mlMax, setMlMax,

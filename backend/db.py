@@ -80,6 +80,33 @@ def init_db():
                 updated_at TEXT DEFAULT (datetime('now'))
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS clv_snapshot_cache (
+                snap_ts TEXT PRIMARY KEY,
+                data    TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS clv_log (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                play_id         INTEGER NOT NULL,
+                window          TEXT,
+                model_prob      REAL,
+                bet_ml          REAL,
+                bet_prob        REAL,
+                commence_time   TEXT,
+                close_ml_side   REAL,
+                close_ml_opp    REAL,
+                book            TEXT,
+                close_prob_side REAL,
+                close_prob_opp  REAL,
+                close_fair_prob REAL,
+                clv             REAL,
+                captured_at     TEXT,
+                source          TEXT NOT NULL DEFAULT 'live',
+                status          TEXT NOT NULL DEFAULT 'ok'
+            )
+        """)
 
         # ── Migrations for existing databases ──────────────────────────
         for col, table, defn in [
@@ -678,3 +705,137 @@ def load_bracket(name: str) -> dict | None:
             (name,),
         ).fetchone()
     return json.loads(row["payload"]) if row else None
+
+
+# ─── CLV (closing line value) ──────────────────────────────────────────────────
+from datetime import datetime as _dt, timezone as _tz
+
+_CLV_COLS = ["id", "play_id", "window", "model_prob", "bet_ml", "bet_prob",
+             "commence_time", "close_ml_side", "close_ml_opp", "book",
+             "close_prob_side", "close_prob_opp", "close_fair_prob",
+             "clv", "captured_at", "source", "status"]
+
+
+def save_clv_snapshot(snap_ts: str, events: list):
+    with _connect() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO clv_snapshot_cache (snap_ts, data) VALUES (?, ?)",
+            (snap_ts, json.dumps(events)),
+        )
+
+
+def load_clv_snapshot(snap_ts: str):
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT data FROM clv_snapshot_cache WHERE snap_ts=?", (snap_ts,)
+        ).fetchone()
+    return json.loads(row["data"]) if row else None
+
+
+def clv_snapshot_count() -> int:
+    with _connect() as conn:
+        return conn.execute("SELECT COUNT(*) FROM clv_snapshot_cache").fetchone()[0]
+
+
+def bulk_save_clv_snapshots(data: dict):
+    """data: {snap_ts: json_string}. Loads the shipped snapshot cache."""
+    with _connect() as conn:
+        conn.executemany(
+            "INSERT OR REPLACE INTO clv_snapshot_cache (snap_ts, data) VALUES (?, ?)",
+            [(ts, d) for ts, d in data.items()],
+        )
+
+
+def save_clv_row(row: dict) -> int:
+    now = _dt.now(_tz.utc).isoformat()
+    with _connect() as conn:
+        cur = conn.execute(
+            """INSERT INTO clv_log
+               (play_id, window, model_prob, bet_ml, bet_prob, commence_time,
+                close_ml_side, close_ml_opp, book,
+                close_prob_side, close_prob_opp, close_fair_prob,
+                clv, captured_at, source, status)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (row["play_id"], row.get("window"), row.get("model_prob"),
+             row.get("bet_ml"), row.get("bet_prob"), row.get("commence_time"),
+             row.get("close_ml_side"), row.get("close_ml_opp"), row.get("book"),
+             row.get("close_prob_side"), row.get("close_prob_opp"), row.get("close_fair_prob"),
+             row.get("clv"), row.get("captured_at", now),
+             row.get("source", "live"), row.get("status", "ok")),
+        )
+        return cur.lastrowid
+
+
+def update_clv_close(clv_id: int, fields: dict, status: str = "ok"):
+    now = _dt.now(_tz.utc).isoformat()
+    with _connect() as conn:
+        conn.execute(
+            """UPDATE clv_log SET close_ml_side=?, close_ml_opp=?, book=?,
+               close_prob_side=?, close_prob_opp=?, close_fair_prob=?,
+               clv=?, captured_at=?, status=? WHERE id=?""",
+            (fields.get("close_ml_side"), fields.get("close_ml_opp"), fields.get("book"),
+             fields.get("close_prob_side"), fields.get("close_prob_opp"), fields.get("close_fair_prob"),
+             fields.get("clv"), now, status, clv_id),
+        )
+
+
+def mark_clv_status(clv_id: int, status: str):
+    now = _dt.now(_tz.utc).isoformat()
+    with _connect() as conn:
+        conn.execute("UPDATE clv_log SET status=?, captured_at=? WHERE id=?", (status, now, clv_id))
+
+
+def load_clv_pending() -> list:
+    with _connect() as conn:
+        rows = conn.execute(
+            f"SELECT {','.join(_CLV_COLS)} FROM clv_log WHERE status='pending' ORDER BY commence_time"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def delete_clv_backfill_for_plays(play_ids: list):
+    if not play_ids:
+        return
+    with _connect() as conn:
+        for i in range(0, len(play_ids), 500):   # chunk under SQLite's 999-var limit
+            chunk = play_ids[i:i + 500]
+            ph = ",".join("?" * len(chunk))
+            conn.execute(f"DELETE FROM clv_log WHERE source='backfill' AND play_id IN ({ph})", chunk)
+
+
+def get_tracked_play(play_id: int) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM tracked_plays WHERE id=?", (play_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def load_result_rows_for_clv(start_date: str, end_date: str) -> list[dict]:
+    """Settled plays in a date range with the fields CLV needs."""
+    with _connect() as conn:
+        rows = conn.execute(
+            """SELECT id, game_id, game_date, team_abbrev, opponent_abbrev,
+                      book_ml, side, window
+               FROM play_results
+               WHERE game_date >= ? AND game_date <= ?""",
+            (start_date, end_date),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def load_clv_report() -> list[dict]:
+    """Captured CLV rows joined to their play. backfill→play_results, live→tracked_plays."""
+    clv_sel = ",".join("c." + c for c in _CLV_COLS)
+    back_q = f"""SELECT {clv_sel}, r.game_date, r.team_abbrev, r.opponent_abbrev,
+                        r.side AS play_side, r.edge_pct, r.book_ml AS line, r.game_type
+                 FROM clv_log c JOIN play_results r ON c.play_id = r.id
+                 WHERE c.source='backfill' AND c.status='ok'"""
+    live_q = f"""SELECT {clv_sel}, t.game_date, t.team_abbrev, t.opponent_abbrev,
+                        t.side AS play_side, t.edge_pct, t.book_ml AS line, t.game_type
+                 FROM clv_log c JOIN tracked_plays t ON c.play_id = t.id
+                 WHERE c.source='live' AND c.status='ok'"""
+    out = []
+    with _connect() as conn:
+        for q in (back_q, live_q):
+            for r in conn.execute(q).fetchall():
+                out.append(dict(r))
+    return out

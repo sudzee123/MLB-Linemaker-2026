@@ -368,8 +368,135 @@ function ConflictBreakdown({ breakdown }) {
   )
 }
 
+// ── CLV view ────────────────────────────────────────────────────────────────
+function pp(x) {
+  if (x == null) return '—'
+  const v = (x * 100)
+  return `${v >= 0 ? '+' : ''}${v.toFixed(2)}pp`
+}
+
+function ClvChart({ chart }) {
+  if (!chart || chart.length < 2) return null
+  const VW = 600, VH = 150, pad = { t: 12, r: 12, b: 12, l: 44 }
+  const pw = VW - pad.l - pad.r, ph = VH - pad.t - pad.b
+  const ys = chart.map(d => d.cum_clv)
+  const yMin = Math.min(0, ...ys), yMax = Math.max(0, ...ys), yr = (yMax - yMin) || 1
+  const n = chart.length
+  const sx = i => pad.l + (i / (n - 1)) * pw
+  const sy = v => pad.t + ph - ((v - yMin) / yr) * ph
+  const path = chart.map((d, i) => `${i === 0 ? 'M' : 'L'}${sx(i).toFixed(1)},${sy(d.cum_clv).toFixed(1)}`).join(' ')
+  const zeroY = sy(0)
+  const endPos = chart[n - 1].cum_clv >= 0
+  return (
+    <div className="chart-container">
+      <svg viewBox={`0 0 ${VW} ${VH}`} className="unit-chart-svg">
+        <line x1={pad.l} y1={zeroY} x2={VW - pad.r} y2={zeroY} stroke="#2a3f55" strokeWidth="1" />
+        <text x={pad.l - 6} y={sy(yMax) + 4} textAnchor="end" fill="#475569" fontSize="10" fontFamily="monospace">{pp(yMax)}</text>
+        <text x={pad.l - 6} y={sy(yMin) + 4} textAnchor="end" fill="#475569" fontSize="10" fontFamily="monospace">{pp(yMin)}</text>
+        <path d={path} fill="none" stroke={endPos ? '#34d399' : '#f87171'} strokeWidth="2" strokeLinejoin="round" />
+      </svg>
+      <div className="chart-legend"><span className="legend-item">Cumulative CLV</span></div>
+    </div>
+  )
+}
+
+function ClvStatRow({ label, s }) {
+  if (!s || !s.count) return null
+  const pos = s.avg_clv >= 0
+  return (
+    <div className="conflict-side">
+      <div className="conflict-side-label">{label}</div>
+      <div className="conflict-side-stats">
+        <span className={`cs-units ${pos ? 'green' : 'red'}`}>{pp(s.avg_clv)}</span>
+        <span className="cs-roi">{s.pct_beating}% beat</span>
+        <span className="cs-plays">{s.count} play{s.count !== 1 ? 's' : ''}</span>
+      </div>
+    </div>
+  )
+}
+
+function ClvView({ clv }) {
+  if (!clv) return <div className="state-msg">Loading…</div>
+  if (!clv.count) return <div className="state-msg">No CLV data for these filters. Run the CLV backfill first.</div>
+  const avgPos = clv.avg_clv >= 0
+  const rows = [...clv.rows].reverse()
+  return (
+    <div className="clv-view">
+      <div className="summary-bar">
+        <div className="stat-pill">
+          <span className="pill-label">Avg CLV</span>
+          <span className={`pill-value ${avgPos ? 'green' : 'red'}`}>{pp(clv.avg_clv)}</span>
+        </div>
+        <div className="stat-pill">
+          <span className="pill-label">Median</span>
+          <span className="pill-value">{pp(clv.median_clv)}</span>
+        </div>
+        <div className="stat-pill">
+          <span className="pill-label">% Beat Close</span>
+          <span className="pill-value">{clv.pct_beating}%</span>
+        </div>
+        <div className="stat-pill">
+          <span className="pill-label">Plays</span>
+          <span className="pill-value">{clv.count}</span>
+        </div>
+      </div>
+
+      <ClvChart chart={clv.chart} />
+
+      <div className="conflict-breakdown">
+        <div className="conflict-pair">
+          <div className="conflict-pair-header">Favorites vs Underdogs</div>
+          <div className="conflict-pair-body">
+            <ClvStatRow label="Favs (−)" s={clv.dogs_vs_favs.favs} />
+            <div className="conflict-divider">vs</div>
+            <ClvStatRow label="Dogs (+)" s={clv.dogs_vs_favs.dogs} />
+          </div>
+        </div>
+        <div className="conflict-pair">
+          <div className="conflict-pair-header">Home vs Away</div>
+          <div className="conflict-pair-body">
+            <ClvStatRow label="Home" s={clv.home_vs_away.home} />
+            <div className="conflict-divider">vs</div>
+            <ClvStatRow label="Away" s={clv.home_vs_away.away} />
+          </div>
+        </div>
+        {clv.edge_buckets.length > 0 && (
+          <div className="conflict-pair">
+            <div className="conflict-pair-header">By Edge Bucket</div>
+            <div className="clv-bucket-grid">
+              {clv.edge_buckets.map(b => (
+                <div key={b.bucket} className="clv-bucket">
+                  <span className="clv-bucket-lbl">{b.bucket}%</span>
+                  <span className={b.avg_clv >= 0 ? 'green' : 'red'}>{pp(b.avg_clv)}</span>
+                  <span className="cs-plays">{b.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="results-history">
+        <div className="rh-header" style={{ gridTemplateColumns: '84px 1fr 44px 52px 60px 60px' }}>
+          <span>Date</span><span>Play</span><span>Side</span><span>Edge</span><span>Bet→Close</span><span>CLV</span>
+        </div>
+        {rows.slice(0, 300).map(r => (
+          <div key={r.date + r.team + r.bet_ml} className="rh-row" style={{ gridTemplateColumns: '84px 1fr 44px 52px 60px 60px' }}>
+            <span className="rh-date">{r.date}</span>
+            <span className="rh-team">{r.team} vs {r.opponent}</span>
+            <span className="rh-ml">{r.side}</span>
+            <span className="rh-edge">{r.edge_pct}</span>
+            <span className="rh-ml">{fmt(r.bet_ml)}→{fmt(r.close_ml)}</span>
+            <span className={r.clv >= 0 ? 'green' : 'red'}>{pp(r.clv)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Window selector ───────────────────────────────────────────────────────────
-const WINDOW_LABELS = { season: 'Season', l30: 'L30', l21: 'L21', conflicts: 'Conflicts' }
+const WINDOW_LABELS = { season: 'Season', l30: 'L30', l21: 'L21', conflicts: 'Conflicts', clv: 'CLV' }
 
 function WindowSelector({ window, onChange }) {
   return (
@@ -626,7 +753,7 @@ function ResultsFilter({
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function ResultsTracker({
-  summary, conflictBreakdown, loading, onUpdate, onDelete, onRefresh,
+  summary, conflictBreakdown, clvSummary, loading, onUpdate, onDelete, onRefresh,
   window, onWindowChange,
   startDate, endDate, onStartDateChange, onEndDateChange,
   minEdge, onMinEdgeChange, maxEdge, onMaxEdgeChange,
@@ -664,6 +791,16 @@ export default function ResultsTracker({
           ? <div className="state-msg">Loading…</div>
           : <ConflictBreakdown breakdown={conflictBreakdown} />
         }
+      </div>
+    )
+  }
+
+  if (window === 'clv') {
+    return (
+      <div className="results-tracker">
+        <WindowSelector window={window} onChange={onWindowChange} />
+        <ResultsFilter {...filterProps} />
+        {loading ? <div className="state-msg">Loading…</div> : <ClvView clv={clvSummary} />}
       </div>
     )
   }

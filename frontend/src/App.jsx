@@ -20,7 +20,7 @@ export default function App() {
   } = useGames()
 
   const {
-    summary, conflictBreakdown, loading: resultsLoading, logResult, updateResult, deleteResult, refresh: refreshResults,
+    summary, conflictBreakdown, clvSummary, loading: resultsLoading, logResult, updateResult, deleteResult, refresh: refreshResults,
     window: resultWindow, setWindow: setResultWindow,
     startDate, setStartDate, endDate, setEndDate,
     minEdge, setMinEdge, maxEdge, setMaxEdge, mlMin, setMlMin, mlMax, setMlMax,
@@ -174,6 +174,7 @@ export default function App() {
           <ResultsTracker
             summary={summary}
             conflictBreakdown={conflictBreakdown}
+            clvSummary={clvSummary}
             loading={resultsLoading}
             onUpdate={updateResult}
             onDelete={deleteResult}

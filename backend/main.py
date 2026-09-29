@@ -36,6 +36,9 @@ from backend.engine.pitching import calc_recalculated_runs_allowed
 from backend.engine.offense import calc_offensive_strength
 from backend.engine.probability import calc_win_probability, prob_to_moneyline
 from backend.engine.edge import calc_edge
+from backend.config import CLV_ENABLED
+from backend.clv import backfill as clv_backfill
+from backend.clv import capture as clv_capture
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -56,6 +59,18 @@ def startup():
     log.info(f"DB_PATH={db_path}")
     db_path.parent.mkdir(parents=True, exist_ok=True)
     db.init_db()
+
+    # Seed the CLV snapshot cache so production can recompute CLV for 0 credits.
+    try:
+        seed = Path(__file__).parent.parent / "seed" / "clv_snapshots.json"
+        if seed.exists() and db.clv_snapshot_count() == 0:
+            import json as _json
+            with open(seed) as f:
+                db.bulk_save_clv_snapshots(_json.load(f))
+            log.info(f"Seeded {db.clv_snapshot_count()} CLV snapshots from repo")
+    except Exception as e:
+        log.warning(f"CLV snapshot seed skipped: {e}")
+
     setup_scheduler(_analyze_games)
 
 
@@ -325,12 +340,21 @@ def _auto_track(games: list[dict], game_date: str, force: bool = False):
                         continue
                 if db.is_auto_tracked(game["game_id"], team_abbrev, wname):
                     continue
-                db.save_tracked_play(
+                _tp_id = db.save_tracked_play(
                     game_date, game["game_id"], team_abbrev, team_name,
                     opp_abbrev, side_label, book_ml, book_name,
                     w["edge_pct"], window=wname, fair_ml=w["fair_ml"],
                     opp_book_ml=opp_book_ml, game_type=game.get("game_type", "R"),
                 )
+                if CLV_ENABLED:  # lock the bet price for CLV — additive, fail-safe
+                    try:
+                        clv_capture.record_detection(_tp_id, {
+                            "book_ml": book_ml, "window": wname,
+                            "model_prob": w.get("win_prob"),
+                            "commence_time": game.get("game_time_utc"),
+                        })
+                    except Exception as e:
+                        log.warning(f"CLV detection hook error, play {_tp_id}: {e}")
                 if db.is_opponent_tracked(game["game_id"], opp_abbrev):
                     db.mark_game_conflict(game["game_id"])
                     log.info(
@@ -706,6 +730,129 @@ def _enrich_results() -> int:
 def enrich_results_endpoint():
     """Backfill side / team game # / rest days across all results (idempotent)."""
     return {"updated": _enrich_results()}
+
+
+# ─── CLV (closing line value) ──────────────────────────────────────────────────
+
+def _parse_edge(edge_pct) -> float | None:
+    try:
+        return float(str(edge_pct).replace("%", "").replace("+", ""))
+    except Exception:
+        return None
+
+
+def _clv_agg(rows: list) -> dict:
+    if not rows:
+        return {"count": 0, "avg_clv": 0.0, "median_clv": 0.0, "pct_beating": 0.0}
+    vals = sorted(r["clv"] for r in rows)
+    n = len(vals)
+    med = vals[n // 2] if n % 2 else (vals[n // 2 - 1] + vals[n // 2]) / 2
+    return {
+        "count": n,
+        "avg_clv": round(sum(vals) / n, 4),
+        "median_clv": round(med, 4),
+        "pct_beating": round(sum(1 for v in vals if v > 0) / n * 100, 1),
+    }
+
+
+@app.get("/api/clv/summary")
+def get_clv_summary(
+    start_date: str | None = Query(default=None),
+    end_date: str | None = Query(default=None),
+    min_edge: float | None = Query(default=None),
+    max_edge: float | None = Query(default=None),
+    ml_min: int | None = Query(default=None),
+    ml_max: int | None = Query(default=None),
+    team: str | None = Query(default=None),
+    window: str | None = Query(default=None),
+    phase: str = Query(default="all"),
+    side_filter: str = Query(default="both"),
+):
+    rows = db.load_clv_report()
+
+    def keep(r):
+        if start_date and r["game_date"] < start_date: return False
+        if end_date and r["game_date"] > end_date: return False
+        if window and r["window"] != window: return False
+        if phase == "reg" and r["game_type"] != "R": return False
+        if phase == "playoffs" and r["game_type"] == "R": return False
+        if side_filter in ("home", "away") and r["play_side"] != side_filter: return False
+        if team and team.upper() not in (r["team_abbrev"] or "").upper(): return False
+        e = _parse_edge(r["edge_pct"])
+        if min_edge is not None and (e is None or e < min_edge): return False
+        if max_edge is not None and (e is None or e > max_edge): return False
+        if ml_min is not None and (r["line"] is None or r["line"] < ml_min): return False
+        if ml_max is not None and (r["line"] is None or r["line"] > ml_max): return False
+        return True
+
+    rows = [r for r in rows if keep(r)]
+    rows.sort(key=lambda r: (r["game_date"] or "", r["id"]))
+
+    favs = [r for r in rows if (r["line"] or 0) < 0]
+    dogs = [r for r in rows if (r["line"] or 0) >= 0]
+    home = [r for r in rows if r["play_side"] == "home"]
+    away = [r for r in rows if r["play_side"] == "away"]
+
+    def edge_bucket(e):
+        if e is None: return None
+        e = abs(e)
+        if e < 3: return "0-3"
+        if e < 5: return "3-5"
+        if e < 10: return "5-10"
+        if e < 20: return "10-20"
+        return "20+"
+    buckets = {}
+    for r in rows:
+        b = edge_bucket(_parse_edge(r["edge_pct"]))
+        if b: buckets.setdefault(b, []).append(r)
+    windows = {}
+    for r in rows:
+        windows.setdefault(r["window"] or "—", []).append(r)
+
+    cum = 0.0
+    chart = []
+    for i, r in enumerate(rows, 1):
+        cum += r["clv"]
+        chart.append({"n": i, "clv": round(r["clv"], 4),
+                      "cum_clv": round(cum, 4), "game_date": r["game_date"]})
+
+    return {
+        **_clv_agg(rows),
+        "dogs_vs_favs": {"favs": _clv_agg(favs), "dogs": _clv_agg(dogs)},
+        "home_vs_away": {"home": _clv_agg(home), "away": _clv_agg(away)},
+        "edge_buckets": [{"bucket": b, **_clv_agg(buckets[b])}
+                         for b in ["0-3", "3-5", "5-10", "10-20", "20+"] if b in buckets],
+        "windows": [{"window": w, **_clv_agg(v)} for w, v in windows.items()],
+        "chart": chart,
+        "rows": [{
+            "date": r["game_date"], "team": r["team_abbrev"], "opponent": r["opponent_abbrev"],
+            "side": r["play_side"], "window": r["window"], "edge_pct": r["edge_pct"],
+            "bet_ml": r["line"], "close_ml": r["close_ml_side"],
+            "clv": round(r["clv"], 4), "game_type": r["game_type"],
+        } for r in rows],
+    }
+
+
+_clv_thread: threading.Thread | None = None
+
+
+@app.api_route("/api/clv/backfill", methods=["GET", "POST"])
+def start_clv_backfill(
+    start_date: str = Query(default="2026-01-01"),
+    end_date: str = Query(default="2026-12-31"),
+):
+    global _clv_thread
+    if _clv_thread is not None and _clv_thread.is_alive():
+        return {"message": "CLV backfill already running", "status": clv_backfill.get_state()}
+    _clv_thread = threading.Thread(
+        target=clv_backfill.run_clv_backfill, args=(start_date, end_date), daemon=True)
+    _clv_thread.start()
+    return {"message": f"CLV backfill started {start_date} → {end_date}"}
+
+
+@app.get("/api/clv/backfill/status")
+def clv_backfill_status():
+    return clv_backfill.get_state()
 
 
 @app.post("/api/results")
