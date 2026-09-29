@@ -417,9 +417,8 @@ function ClvStatRow({ label, s }) {
 
 function ClvView({ clv }) {
   if (!clv) return <div className="state-msg">Loading…</div>
-  if (!clv.count) return <div className="state-msg">No CLV data for these filters. Run the CLV backfill first.</div>
+  if (!clv.count) return <div className="clv-empty">No CLV plays match these filters.</div>
   const avgPos = clv.avg_clv >= 0
-  const rows = [...clv.rows].reverse()
   return (
     <div className="clv-view">
       <div className="summary-bar">
@@ -475,28 +474,12 @@ function ClvView({ clv }) {
           </div>
         )}
       </div>
-
-      <div className="results-history">
-        <div className="rh-header" style={{ gridTemplateColumns: '84px 1fr 44px 52px 60px 60px' }}>
-          <span>Date</span><span>Play</span><span>Side</span><span>Edge</span><span>Bet→Close</span><span>CLV</span>
-        </div>
-        {rows.slice(0, 300).map(r => (
-          <div key={r.date + r.team + r.bet_ml} className="rh-row" style={{ gridTemplateColumns: '84px 1fr 44px 52px 60px 60px' }}>
-            <span className="rh-date">{r.date}</span>
-            <span className="rh-team">{r.team} vs {r.opponent}</span>
-            <span className="rh-ml">{r.side}</span>
-            <span className="rh-edge">{r.edge_pct}</span>
-            <span className="rh-ml">{fmt(r.bet_ml)}→{fmt(r.close_ml)}</span>
-            <span className={r.clv >= 0 ? 'green' : 'red'}>{pp(r.clv)}</span>
-          </div>
-        ))}
-      </div>
     </div>
   )
 }
 
 // ── Window selector ───────────────────────────────────────────────────────────
-const WINDOW_LABELS = { season: 'Season', l30: 'L30', l21: 'L21', conflicts: 'Conflicts', clv: 'CLV' }
+const WINDOW_LABELS = { season: 'Season', l30: 'L30', l21: 'L21', conflicts: 'Conflicts' }
 
 function WindowSelector({ window, onChange }) {
   return (
@@ -795,16 +778,6 @@ export default function ResultsTracker({
     )
   }
 
-  if (window === 'clv') {
-    return (
-      <div className="results-tracker">
-        <WindowSelector window={window} onChange={onWindowChange} />
-        <ResultsFilter {...filterProps} />
-        {loading ? <div className="state-msg">Loading…</div> : <ClvView clv={clvSummary} />}
-      </div>
-    )
-  }
-
   if (loading) return (
     <div className="results-tracker">
       <WindowSelector window={window} onChange={onWindowChange} />
@@ -899,6 +872,14 @@ export default function ResultsTracker({
 
       {/* History */}
       <HistoryTable chartData={summary.chart_data} onUpdate={onUpdate} onDelete={onDelete} />
+
+      {/* Closing Line Value — same filters + window as the results above */}
+      {clvSummary && clvSummary.count > 0 && (
+        <div className="clv-section">
+          <div className="clv-section-title">Closing Line Value</div>
+          <ClvView clv={clvSummary} />
+        </div>
+      )}
     </div>
   )
 }

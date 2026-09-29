@@ -826,11 +826,13 @@ def load_clv_report() -> list[dict]:
     """Captured CLV rows joined to their play. backfill→play_results, live→tracked_plays."""
     clv_sel = ",".join("c." + c for c in _CLV_COLS)
     back_q = f"""SELECT {clv_sel}, r.game_date, r.team_abbrev, r.opponent_abbrev,
-                        r.side AS play_side, r.edge_pct, r.book_ml AS line, r.game_type
+                        r.side AS play_side, r.edge_pct, r.book_ml AS line, r.game_type,
+                        r.team_game_num, r.rest_days
                  FROM clv_log c JOIN play_results r ON c.play_id = r.id
                  WHERE c.source='backfill' AND c.status='ok'"""
     live_q = f"""SELECT {clv_sel}, t.game_date, t.team_abbrev, t.opponent_abbrev,
-                        t.side AS play_side, t.edge_pct, t.book_ml AS line, t.game_type
+                        t.side AS play_side, t.edge_pct, t.book_ml AS line, t.game_type,
+                        NULL AS team_game_num, NULL AS rest_days
                  FROM clv_log c JOIN tracked_plays t ON c.play_id = t.id
                  WHERE c.source='live' AND c.status='ok'"""
     out = []

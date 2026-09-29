@@ -767,13 +767,17 @@ def get_clv_summary(
     window: str | None = Query(default=None),
     phase: str = Query(default="all"),
     side_filter: str = Query(default="both"),
+    game_num_min: int | None = Query(default=None),
+    game_num_max: int | None = Query(default=None),
+    rest_min: int | None = Query(default=None),
+    rest_max: int | None = Query(default=None),
 ):
     rows = db.load_clv_report()
 
     def keep(r):
         if start_date and r["game_date"] < start_date: return False
         if end_date and r["game_date"] > end_date: return False
-        if window and r["window"] != window: return False
+        if window and window in ("season", "l30", "l21") and r["window"] != window: return False
         if phase == "reg" and r["game_type"] != "R": return False
         if phase == "playoffs" and r["game_type"] == "R": return False
         if side_filter in ("home", "away") and r["play_side"] != side_filter: return False
@@ -783,6 +787,12 @@ def get_clv_summary(
         if max_edge is not None and (e is None or e > max_edge): return False
         if ml_min is not None and (r["line"] is None or r["line"] < ml_min): return False
         if ml_max is not None and (r["line"] is None or r["line"] > ml_max): return False
+        gn = r.get("team_game_num")
+        if game_num_min is not None and (gn is None or gn < game_num_min): return False
+        if game_num_max is not None and (gn is None or gn > game_num_max): return False
+        rd = r.get("rest_days")
+        if rest_min is not None and (rd is None or rd < rest_min): return False
+        if rest_max is not None and (rd is None or rd > rest_max): return False
         return True
 
     rows = [r for r in rows if keep(r)]

@@ -34,21 +34,7 @@ export function useResults() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         setConflictBreakdown(await res.json())
         setSummary(null)
-      } else if (window === 'clv') {
-        const p = new URLSearchParams()
-        if (startDate) p.set('start_date', startDate)
-        if (endDate) p.set('end_date', endDate)
-        if (minEdge !== '') p.set('min_edge', minEdge)
-        if (maxEdge !== '') p.set('max_edge', maxEdge)
-        if (mlMin !== '') p.set('ml_min', mlMin)
-        if (mlMax !== '') p.set('ml_max', mlMax)
-        if (team !== '') p.set('team', team)
-        if (phase !== 'all') p.set('phase', phase)
-        if (homeAway !== 'both') p.set('side_filter', homeAway)
-        const res = await fetch(`${API}/clv/summary?${p.toString()}`)
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        setClvSummary(await res.json())
-        setSummary(null)
+        setClvSummary(null)
       } else {
         const params = new URLSearchParams()
         params.set('window', window)
@@ -69,9 +55,19 @@ export function useResults() {
         if (restMin !== '') params.set('rest_min', restMin)
         if (restMax !== '') params.set('rest_max', restMax)
         if (mode !== 'on') params.set('mode', mode)
-        const res = await fetch(`${API}/results/summary?${params.toString()}`)
+
+        // CLV shares the same filters (minus jsp/prev-loss/mode — CLV is on-side).
+        const cp = new URLSearchParams(params)
+        cp.delete('jsp_min'); cp.delete('jsp_max')
+        cp.delete('prev_loss_filter'); cp.delete('mode')
+
+        const [res, clvRes] = await Promise.all([
+          fetch(`${API}/results/summary?${params.toString()}`),
+          fetch(`${API}/clv/summary?${cp.toString()}`),
+        ])
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         setSummary(await res.json())
+        setClvSummary(clvRes.ok ? await clvRes.json() : null)
         setConflictBreakdown(null)
       }
     } catch (e) {
