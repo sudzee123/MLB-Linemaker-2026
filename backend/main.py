@@ -686,18 +686,19 @@ _ABBREV_TO_ID = {ab: tid for tid, ab in TEAM_ID_TO_ABBREV.items()}
 def _enrich_results() -> int:
     """
     Fill side / team_game_num / rest_days on every play_results row from each
-    team's season schedule. Idempotent — safe to re-run. Returns rows updated.
+    team's season schedule. Season-aware (2025 rows use the 2025 schedule).
+    Idempotent — safe to re-run. Returns rows updated.
     """
-    # Which teams actually appear in results (avoid fetching all 30 if fewer).
     keys = db.load_result_keys()
-    abbrevs = {k["team_abbrev"] for k in keys}
+    # Fetch each (season-year, team) schedule once.
+    pairs = {(k["game_date"][:4], k["team_abbrev"]) for k in keys}
 
-    team_maps: dict[str, dict] = {}
-    for ab in abbrevs:
+    team_maps: dict[tuple, dict] = {}
+    for yr, ab in pairs:
         tid = _ABBREV_TO_ID.get(ab)
         if tid is None:
             continue
-        sched = fetch_team_schedule(tid)
+        sched = fetch_team_schedule(tid, season=int(yr))
         m = {}
         prev = None
         for i, gm in enumerate(sched):
@@ -709,21 +710,34 @@ def _enrich_results() -> int:
                 except Exception:
                     rest = None
             m[gm["game_id"]] = {
-                "num": i + 1,
-                "rest": rest,
+                "num": i + 1, "rest": rest,
                 "side": "home" if gm["is_home"] else "away",
             }
             prev = gm["date"]
-        team_maps[ab] = m
+        team_maps[(yr, ab)] = m
 
     updated = 0
     for k in keys:
-        info = team_maps.get(k["team_abbrev"], {}).get(k["game_id"])
+        info = team_maps.get((k["game_date"][:4], k["team_abbrev"]), {}).get(k["game_id"])
         if info:
             db.update_result_enrichment(k["id"], info["side"], info["num"], info["rest"])
             updated += 1
     log.info(f"Results enrichment: updated {updated}/{len(keys)} rows")
     return updated
+
+
+@app.api_route("/api/merge/import-2025", methods=["GET", "POST"])
+def import_2025_results():
+    """Import the 2025 season results into the unified store, then enrich (idempotent)."""
+    seed = Path(__file__).parent.parent / "seed" / "results_2025.json"
+    if not seed.exists():
+        return {"error": "seed/results_2025.json not found"}
+    import json as _json
+    with open(seed) as f:
+        rows = _json.load(f)
+    imported = db.import_legacy_results(rows)
+    enriched = _enrich_results()
+    return {"imported": imported, "in_seed": len(rows), "enriched": enriched}
 
 
 @app.api_route("/api/results/enrich", methods=["GET", "POST"])
@@ -771,12 +785,14 @@ def get_clv_summary(
     game_num_max: int | None = Query(default=None),
     rest_min: int | None = Query(default=None),
     rest_max: int | None = Query(default=None),
+    season: str | None = Query(default=None),
 ):
     rows = db.load_clv_report()
 
     def keep(r):
         if start_date and r["game_date"] < start_date: return False
         if end_date and r["game_date"] > end_date: return False
+        if season in ("2025", "2026") and not (r["game_date"] or "").startswith(season): return False
         if window and window in ("season", "l30", "l21") and r["window"] != window: return False
         if phase == "reg" and r["game_type"] != "R": return False
         if phase == "playoffs" and r["game_type"] == "R": return False
@@ -898,11 +914,12 @@ def get_results_summary(
     rest_min: int | None = Query(default=None),
     rest_max: int | None = Query(default=None),
     mode: str = Query(default="on", description="on = play the model side, against = fade it"),
+    season: str | None = Query(default=None),
 ):
     results = db.load_results(window, start_date, end_date, min_edge, max_edge,
                               ml_min, ml_max, jsp_min, jsp_max, team, prev_loss_filter,
                               playoffs_only, phase, side_filter,
-                              game_num_min, game_num_max, rest_min, rest_max)
+                              game_num_min, game_num_max, rest_min, rest_max, season)
 
     # Normalize each row into a display record for the requested mode.
     # "on"  = bet the model's side at its book_ml.

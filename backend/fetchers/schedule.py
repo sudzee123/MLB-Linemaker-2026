@@ -107,16 +107,16 @@ def fetch_schedule(date_str: str) -> list[dict]:
     return games
 
 
-def fetch_team_schedule(team_id: int) -> list[dict]:
+def fetch_team_schedule(team_id: int, season: int = None) -> list[dict]:
     """
-    A team's completed games for the season, ordered by date, each as
+    A team's completed games for a season, ordered by date, each as
     {game_id, date, is_home}. Used to derive team game number, rest days,
     and home/away side for the Results filters.
     """
     url = f"{MLB_API_BASE}/schedule"
     params = {
         "sportId": 1,
-        "season": SEASON,
+        "season": season or SEASON,
         "teamId": team_id,
         "gameType": "R,F,D,L,W",
     }

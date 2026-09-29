@@ -13,7 +13,21 @@
       "Bash(python3 -c \"from backend.main import app; print\\('OK'\\)\")",
       "Bash(git init *)",
       "Bash(git remote *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(curl *)",
+      "Bash(railway volume *)",
+      "Bash(railway link *)",
+      "Bash(railway upgrade *)",
+      "Bash(sh)",
+      "Bash(sqlite3 /Users/jonathanskonie/mlb-linemaker/linemaker.db \"PRAGMA wal_checkpoint\\(TRUNCATE\\);\")",
+      "Bash(git rm *)",
+      "Bash(python3 *)",
+      "Bash(railway ssh *)",
+      "Bash(railway status *)",
+      "Bash(railway deployment *)",
+      "Bash(railway logs *)"
     ]
   }
 }

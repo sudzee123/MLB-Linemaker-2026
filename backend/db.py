@@ -270,6 +270,7 @@ def load_results(
     game_num_max: int | None = None,
     rest_min: int | None = None,
     rest_max: int | None = None,
+    season: str | None = None,     # '2025' | '2026' | None(all)
 ) -> list[dict]:
     if window == 'conflicts':
         conditions = ["game_id IN (SELECT DISTINCT game_id FROM tracked_plays WHERE conflict=1)"]
@@ -304,6 +305,9 @@ def load_results(
     if team:
         conditions.append("UPPER(team_abbrev) LIKE UPPER(?)")
         params.append(f'%{team}%')
+    if season in ('2025', '2026'):
+        conditions.append("game_date LIKE ?")
+        params.append(f'{season}%')
     if playoffs_only:
         conditions.append("game_type != 'R'")
     if phase == 'reg':
@@ -376,12 +380,29 @@ def delete_result(result_id: int) -> bool:
 
 
 def load_result_keys() -> list[dict]:
-    """Minimal rows (id, game_id, team_abbrev) for enrichment."""
+    """Minimal rows (id, game_id, team_abbrev, game_date) for enrichment."""
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT id, game_id, team_abbrev FROM play_results"
+            "SELECT id, game_id, team_abbrev, game_date FROM play_results"
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def import_legacy_results(rows: list[dict]) -> int:
+    """Insert legacy-season results (INSERT OR IGNORE — idempotent). Returns new rows."""
+    inserted = 0
+    with _connect() as conn:
+        for r in rows:
+            cur = conn.execute(
+                """INSERT OR IGNORE INTO play_results
+                   (game_date, game_id, team_abbrev, opponent_abbrev, book_ml,
+                    edge_pct, result, units_gained, window, game_type)
+                   VALUES (?,?,?,?,?,?,?,?,?, 'R')""",
+                (r["game_date"], r["game_id"], r["team_abbrev"], r["opponent_abbrev"],
+                 r["book_ml"], r["edge_pct"], r["result"], r["units_gained"], r["window"]),
+            )
+            inserted += cur.rowcount
+    return inserted
 
 
 def update_result_enrichment(result_id: int, side, team_game_num, rest_days):

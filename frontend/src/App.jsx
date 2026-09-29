@@ -32,6 +32,7 @@ export default function App() {
     gameNumMin, setGameNumMin, gameNumMax, setGameNumMax,
     restMin, setRestMin, restMax, setRestMax,
     mode, setMode,
+    season, setSeason,
   } = useResults()
 
   const { grouped, loading: playsLoading, settleGroup, removeGroup } = usePlays()
@@ -215,6 +216,8 @@ export default function App() {
             onRestMaxChange={setRestMax}
             mode={mode}
             onModeChange={setMode}
+            season={season}
+            onSeasonChange={setSeason}
           />
         )}
 

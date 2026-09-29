@@ -25,6 +25,7 @@ export function useResults() {
   const [restMin, setRestMin] = useState('')
   const [restMax, setRestMax] = useState('')
   const [mode, setMode] = useState('on') // on | against  (Bet Side)
+  const [season, setSeason] = useState('') // '' all · '2025' · '2026'
 
   const fetchSummary = useCallback(async () => {
     setLoading(true)
@@ -55,6 +56,7 @@ export function useResults() {
         if (restMin !== '') params.set('rest_min', restMin)
         if (restMax !== '') params.set('rest_max', restMax)
         if (mode !== 'on') params.set('mode', mode)
+        if (season !== '') params.set('season', season)
 
         // CLV shares the same filters (minus jsp/prev-loss/mode — CLV is on-side).
         const cp = new URLSearchParams(params)
@@ -75,7 +77,7 @@ export function useResults() {
     } finally {
       setLoading(false)
     }
-  }, [window, startDate, endDate, minEdge, maxEdge, mlMin, mlMax, jspMin, jspMax, team, prevLossFilter, phase, homeAway, gameNumMin, gameNumMax, restMin, restMax, mode])
+  }, [window, startDate, endDate, minEdge, maxEdge, mlMin, mlMax, jspMin, jspMax, team, prevLossFilter, phase, homeAway, gameNumMin, gameNumMax, restMin, restMax, mode, season])
 
   useEffect(() => { fetchSummary() }, [fetchSummary])
 
@@ -127,5 +129,6 @@ export function useResults() {
     gameNumMin, setGameNumMin, gameNumMax, setGameNumMax,
     restMin, setRestMin, restMax, setRestMax,
     mode, setMode,
+    season, setSeason,
   }
 }

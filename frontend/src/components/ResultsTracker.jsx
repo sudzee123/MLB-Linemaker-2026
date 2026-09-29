@@ -611,23 +611,32 @@ function ResultsFilter({
   gameNumMin, onGameNumMinChange, gameNumMax, onGameNumMaxChange,
   restMin, onRestMinChange, restMax, onRestMaxChange,
   mode, onModeChange,
+  season, onSeasonChange,
 }) {
   const isFiltered = startDate || endDate || minEdge !== '' || maxEdge !== '' ||
     mlMin !== '' || mlMax !== '' || jspMin !== '' || jspMax !== '' || team !== '' ||
     prevLossFilter || phase !== 'all' || homeAway !== 'both' || mode !== 'on' ||
-    gameNumMin !== '' || gameNumMax !== '' || restMin !== '' || restMax !== ''
+    season !== '' || gameNumMin !== '' || gameNumMax !== '' || restMin !== '' || restMax !== ''
 
   function clearAll() {
     onStartDateChange(''); onEndDateChange('')
     onMinEdgeChange(''); onMaxEdgeChange(''); onMlMinChange(''); onMlMaxChange('')
     onJspMinChange(''); onJspMaxChange(''); onTeamChange('')
     onPrevLossFilterChange(false)
-    onPhaseChange('all'); onHomeAwayChange('both'); onModeChange('on')
+    onPhaseChange('all'); onHomeAwayChange('both'); onModeChange('on'); onSeasonChange('')
     onGameNumMinChange(''); onGameNumMaxChange(''); onRestMinChange(''); onRestMaxChange('')
   }
 
   return (
     <div className="results-filter">
+      <div className="rf-line">
+        <span className="rf-lbl">Season</span>
+        <div className="rf-ctrl">
+          <Seg value={season} onChange={onSeasonChange}
+            options={[['', 'All Time'], ['2026', '2026'], ['2025', '2025']]} />
+        </div>
+      </div>
+
       <div className="rf-line">
         <span className="rf-lbl">Dates</span>
         <div className="rf-ctrl">
@@ -749,8 +758,9 @@ export default function ResultsTracker({
   gameNumMin, onGameNumMinChange, gameNumMax, onGameNumMaxChange,
   restMin, onRestMinChange, restMax, onRestMaxChange,
   mode, onModeChange,
+  season, onSeasonChange,
 }) {
-  const isFiltered = startDate || endDate || minEdge !== '' || maxEdge !== '' || mlMin !== '' || mlMax !== '' || jspMin !== '' || jspMax !== '' || team !== '' || prevLossFilter || phase !== 'all' || homeAway !== 'both' || mode !== 'on' || gameNumMin !== '' || gameNumMax !== '' || restMin !== '' || restMax !== ''
+  const isFiltered = startDate || endDate || minEdge !== '' || maxEdge !== '' || mlMin !== '' || mlMax !== '' || jspMin !== '' || jspMax !== '' || team !== '' || prevLossFilter || phase !== 'all' || homeAway !== 'both' || mode !== 'on' || season !== '' || gameNumMin !== '' || gameNumMax !== '' || restMin !== '' || restMax !== ''
 
   const filterProps = {
     startDate, endDate, onStartDateChange, onEndDateChange,
@@ -764,6 +774,7 @@ export default function ResultsTracker({
     gameNumMin, onGameNumMinChange, gameNumMax, onGameNumMaxChange,
     restMin, onRestMinChange, restMax, onRestMaxChange,
     mode, onModeChange,
+    season, onSeasonChange,
   }
 
   if (window === 'conflicts') {
