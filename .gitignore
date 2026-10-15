@@ -5,3 +5,7 @@ __pycache__/
 *.db
 frontend/node_modules/
 .DS_Store
+
+# Claude Code local-only files (project skills/settings in .claude/ stay tracked)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
