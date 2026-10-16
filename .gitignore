@@ -9,3 +9,4 @@ frontend/node_modules/
 # Claude Code local-only files (project skills/settings in .claude/ stay tracked)
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+.venv/
